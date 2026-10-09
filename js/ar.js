@@ -3,12 +3,13 @@
 // is shown on screen and never recorded or sent.
 import * as THREE from '../vendor/three/three.module.min.js';
 import { rotationMatrix, rotateAboutUp } from './orientation.js';
-import { DEG } from './geo.js';
+import { DEG, toAzEl, wrap180, angleBetween } from './geo.js';
 import { screenAngle } from './sensors.js';
 
 export class ArView {
   /** sensor: a running SensorPointer (gives the north offset); trueDir: ENU unit vector; label: target name. */
-  constructor(root, { sensor, trueDir, label }) {
+  constructor(root, { sensor, trueDir, label, onHint }) {
+    this.onHint = onHint;
     this.root = root;
     this.sensor = sensor;
     this.trueDir = trueDir;
@@ -40,6 +41,17 @@ export class ArView {
     sprite.scale.set(1.6, 0.4, 1);
     sprite.position.copy(start).addScaledVector(d, 4).add(new THREE.Vector3(0, 0, 0.3));
     this.scene.add(sprite);
+    // A "satnav" arrow that floats just in front of the camera and points along the true direction, so
+    // there is always something on screen to follow even when the beam is out of frame.
+    const navMat = new THREE.MeshBasicMaterial({ color: 0xffd166, depthTest: false });
+    this.nav = new THREE.Group();
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.36, 12), navMat);
+    shaft.position.y = 0.18;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.16, 16), navMat);
+    head.position.y = 0.43;
+    this.nav.add(shaft, head);
+    this.nav.traverse((o) => { o.renderOrder = 20; });
+    this.scene.add(this.nav);
     this.loop = this.loop.bind(this);
   }
 
@@ -73,9 +85,28 @@ export class ArView {
       const x = axis([Math.cos(t), -Math.sin(t), 0]), y = axis([Math.sin(t), Math.cos(t), 0]), z = axis([0, 0, 1]);
       const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(...x), new THREE.Vector3(...y), new THREE.Vector3(...z));
       this.camera.quaternion.setFromRotationMatrix(m);
+      // place the satnav arrow 1.4 m ahead and a little below the centre of the view, pointing the true way
+      const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+      const camUp = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+      this.nav.position.copy(fwd).multiplyScalar(1.4).addScaledVector(camUp, -0.28).addScaledVector(new THREE.Vector3(...this.trueDir), -0.2);
+      this.nav.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...this.trueDir));
+      this.hint([fwd.x, fwd.y, fwd.z]);
     }
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(this.loop);
+  }
+
+  /** "Turn right 40°, tilt down 25°" from where the camera faces to the true direction. */
+  hint(fwd) {
+    if (!this.onHint) return;
+    const err = angleBetween(fwd, this.trueDir);
+    if (err <= 5) { this.onHint('🎯 You’re looking straight at it!'); return; }
+    const f = toAzEl(fwd), t = toAzEl(this.trueDir);
+    const parts = [];
+    const dAz = wrap180(t.az - f.az), dEl = t.el - f.el;
+    if (Math.abs(f.el) < 80 && Math.abs(dAz) >= 5) parts.push(`turn ${dAz > 0 ? 'right' : 'left'} ${Math.round(Math.abs(dAz))}°`);
+    if (Math.abs(dEl) >= 5) parts.push(`tilt ${dEl > 0 ? 'up' : 'down'} ${Math.round(Math.abs(dEl))}°`);
+    this.onHint(`${parts.join(', ')}`.replace(/^./, (c) => c.toUpperCase()) || 'Almost there');
   }
 
   stop() {

@@ -3,7 +3,7 @@
 
 export const PERFECT_WITHIN = 5;   // degrees: about normal phone-compass error
 export const ZERO_AT = 90;         // degrees: pointing at right angles scores nothing
-export const TARGETS_PER_DAY = 5;
+export const TARGETS_PER_DAY = 3;
 export const MAX_TOTAL = 100 * TARGETS_PER_DAY;
 
 /** Points (0-100, whole numbers) for a 3D pointing error in degrees. */
@@ -44,7 +44,7 @@ export function shareText(puzzleNumber, results, url, modeLabel = '') {
 }
 
 // --- share links: ?r=<yyyymmdd>.<mode>.<errors in tenths of a degree, base 36> ---
-// Only the day, the mode and the five errors. Never a position, a town or a direction.
+// Only the day, the mode and the errors. Never a position, a town or a direction.
 const MODES = ['sensor', 'map', 'fixed-sensor', 'fixed-map'];
 
 export function encodeResult({ day, mode, errors }) {

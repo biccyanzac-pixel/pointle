@@ -63,6 +63,8 @@ export class Globe {
     this.world.add(this.coast);
     this.marks = new THREE.Group();
     this.world.add(this.marks);
+    this.live = new THREE.Group();   // the arrow that follows the player after the guess
+    this.world.add(this.live);
     this.installDrag();
     this.resize();
     this.loop = this.loop.bind(this);
@@ -112,8 +114,9 @@ export class Globe {
    * opts.stub: draw the guess as a short arrow only (practice before playing: never shows where it exits).
    * opts.hideTarget: don't draw the target or the true line.
    */
-  show({ origin, target, guessEnu = null, stub = false, hideTarget = false, face = true }) {
+  show({ origin, target, guessEnu = null, stub = false, hideTarget = false, face = true, guessColour = '--bad' }) {
     this.clearMarks();
+    this.origin = origin;
     const p = spherePoint(origin.lat, origin.lon);
     this.dot(origin.lat, origin.lon, css('--you'));
     if (target && !hideTarget) {
@@ -125,8 +128,8 @@ export class Globe {
       const d = enuToWorld(guessEnu, origin.lat, origin.lon);
       const t = stub ? 0.35 : exitDistance(p, d) ?? 0.4;
       const end = p.clone().addScaledVector(d, t);
-      this.line(p, end, css('--bad'), 2.5);
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.08, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(css('--bad')), depthTest: false }));
+      this.line(p, end, css(guessColour), 2.5);
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.08, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(css(guessColour)), depthTest: false }));
       cone.position.copy(end);
       cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d);
       cone.renderOrder = 6;
@@ -134,6 +137,26 @@ export class Globe {
       this.guessEnd = end;
     }
     if (face) this.faceTowards(target && !hideTarget ? [p, spherePoint(target.lat, target.lon)] : [p]);
+    this.render();
+  }
+
+  /**
+   * Live arrow from the origin along an ENU direction (phone pointing, or the swept direction in map mode).
+   * Doesn't move the camera, so the player can keep spinning the globe while it updates.
+   */
+  setLive(enu, colour = '--bad') {
+    for (const c of [...this.live.children]) { this.live.remove(c); c.geometry?.dispose(); }
+    if (!enu || !this.origin) { this.render(); return; }
+    const p = spherePoint(this.origin.lat, this.origin.lon);
+    const d = enuToWorld(enu, this.origin.lat, this.origin.lon);
+    const t = exitDistance(p, d) ?? 0.4;
+    const end = p.clone().addScaledVector(d, t);
+    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(css(colour)), depthTest: false });
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.LineCurve3(p, end), 1, 0.014, 8), mat);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.11, 14), mat);
+    cone.position.copy(end);
+    cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d);
+    for (const m of [tube, cone]) { m.renderOrder = 7; this.live.add(m); }
     this.render();
   }
 

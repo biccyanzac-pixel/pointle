@@ -1,5 +1,6 @@
-// Map mode: a satellite view of the player's surroundings (north up) with a 3D arrow they turn by
-// dragging and tilt with a separate slider. The view covers only the local area (about 150 km), so it
+// Map mode: a satellite view of the player's surroundings (north up) with a 3D arrow. Grab the arrow and
+// drag it to swing it round in 3D (including down into the ground); drag anywhere else to turn it; or use
+// the heading and tilt sliders / arrow keys. The view covers only the local area (about 150 km), so it
 // never shows the target or where the arrow would come out of the Earth.
 //
 // PRIVACY: the imagery tiles are fetched from EOX for the area around the origin, so EOX's servers learn
@@ -15,6 +16,7 @@ export const IMAGERY = {
 };
 
 const TILE = 256, GRID = 4;
+const ARROW_LEN = 260;
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 /** Fractional Web Mercator tile coordinates. */
@@ -114,6 +116,15 @@ export class MapView {
     const head = new THREE.Mesh(new THREE.ConeGeometry(18, 50, 20), mat);
     head.position.y = 235;
     this.arrow.add(shaft, head);
+    // invisible, generous grab handle around the arrow (easier to hit than the thin shaft)
+    this.handle = new THREE.Mesh(new THREE.CylinderGeometry(34, 34, 270, 12), new THREE.MeshBasicMaterial({ visible: false }));
+    this.handle.position.y = 135;
+    this.arrow.add(this.handle);
+    // glowing ball at the tip: the thing to grab
+    this.knob = new THREE.Mesh(new THREE.SphereGeometry(16, 20, 16), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true, opacity: 0.9 }));
+    this.knob.position.y = ARROW_LEN;
+    this.knob.renderOrder = 8;
+    this.arrow.add(this.knob);
     this.arrow.traverse((o) => { o.renderOrder = 6; });
     this.arrow.userData = { mat, under };
     this.scene.add(this.arrow);
@@ -129,16 +140,40 @@ export class MapView {
   }
 
   installControls() {
-    let last = null;
     const el = this.canvas;
+    const ray = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+    let mode = null, lastX = 0;
     el.style.touchAction = 'none';
-    el.addEventListener('pointerdown', (e) => { last = e.clientX; el.setPointerCapture(e.pointerId); el.focus({ preventScroll: true }); });
-    el.addEventListener('pointermove', (e) => {
-      if (last == null) return;
-      this.setDirection(this.az + (e.clientX - last) * 0.35, this.el);
-      last = e.clientX;
+    const toNdc = (e) => {
+      const r = el.getBoundingClientRect();
+      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      ray.setFromCamera(ndc, this.camera);
+    };
+    el.addEventListener('pointerdown', (e) => {
+      el.setPointerCapture(e.pointerId);
+      el.focus({ preventScroll: true });
+      toNdc(e);
+      mode = ray.intersectObjects([this.handle, this.knob], false).length ? 'arrow' : 'turn';
+      el.classList.toggle('grabbing-arrow', mode === 'arrow');
+      lastX = e.clientX;
     });
-    const up = () => { last = null; };
+    el.addEventListener('pointermove', (e) => {
+      toNdc(e);
+      if (!mode) {   // hover feedback
+        el.classList.toggle('over-arrow', ray.intersectObjects([this.handle, this.knob], false).length > 0);
+        return;
+      }
+      if (mode === 'turn') {
+        this.setDirection(this.az + (e.clientX - lastX) * 0.35, this.el);
+        lastX = e.clientX;
+        return;
+      }
+      const d = this.dragDirection(ray.ray);
+      const len = Math.hypot(d.x, d.y);
+      this.setDirection(Math.atan2(d.x, d.y) / DEG, Math.atan2(d.z, len) / DEG);
+    });
+    const up = () => { mode = null; el.classList.remove('grabbing-arrow'); };
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
     el.addEventListener('keydown', (e) => {
@@ -148,6 +183,24 @@ export class MapView {
       e.preventDefault();
       this.setDirection(this.az + k[0], this.el + k[1]);
     });
+  }
+
+  /**
+   * Where the arrow should point so its tip sits under the cursor: intersect the pointer ray with the sphere
+   * the tip moves on. Of the two intersections take the one nearer the current tip (so you can swing the
+   * arrow round the back and under the ground smoothly); if the ray misses, use the sphere's silhouette.
+   */
+  dragDirection(r) {
+    const o = r.origin, dir = r.direction;
+    const b = o.dot(dir), c = o.lengthSq() - ARROW_LEN * ARROW_LEN;
+    const disc = b * b - c;
+    const cur = new THREE.Vector3(...fromAzEl(this.az, this.el));
+    if (disc >= 0) {
+      const p1 = o.clone().addScaledVector(dir, -b - Math.sqrt(disc)).normalize();
+      const p2 = o.clone().addScaledVector(dir, -b + Math.sqrt(disc)).normalize();
+      return p1.dot(cur) >= p2.dot(cur) ? p1 : p2;
+    }
+    return o.clone().addScaledVector(dir, -b).normalize();
   }
 
   setDirection(az, el) {
@@ -169,8 +222,15 @@ export class MapView {
     this.drop.geometry.setFromPoints([tip, new THREE.Vector3(tip.x, tip.y, 0)]);
     this.drop.computeLineDistances();
     const below = this.el < 0;
-    this.arrow.children.forEach((m) => { m.material = below ? this.arrow.userData.under : this.arrow.userData.mat; });
+    [this.arrow.children[0], this.arrow.children[1]].forEach((m) => { m.material = below ? this.arrow.userData.under : this.arrow.userData.mat; });
     this.render();
+  }
+
+  /** Screen position (client px) of the arrow's grab knob. Used by the end-to-end test. */
+  tipScreen() {
+    const v = new THREE.Vector3(...fromAzEl(this.az, this.el)).multiplyScalar(ARROW_LEN).project(this.camera);
+    const r = this.canvas.getBoundingClientRect();
+    return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
   }
 
   resize() {

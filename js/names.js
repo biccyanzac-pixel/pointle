@@ -17,7 +17,7 @@ const WHOLE_WORD_ONLY = new Set(['cum', 'dick', 'cock', 'arse', 'tits', 'spic', 
 const LEET = { 0: 'o', 1: 'i', 3: 'e', 4: 'a', 5: 's', 7: 't', 8: 'b', '@': 'a', $: 's', '!': 'i', '|': 'i' };
 
 function squash(s) {
-  return s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+  return s.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[0134578@$!|]/g, (c) => LEET[c]);
 }
 
@@ -31,7 +31,7 @@ export function isProfane(raw) {
 /** Trim, collapse whitespace, strip control characters. Returns null if empty or too long. */
 export function cleanText(raw, max) {
   if (typeof raw !== 'string') return null;
-  const s = raw.replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮]/g, '').replace(/\s+/g, ' ').trim();
+  const s = raw.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e]/g, '').replace(/\s+/g, ' ').trim();
   if (!s || [...s].length > max) return null;
   return s;
 }
