@@ -1,5 +1,5 @@
 // Pre-generate the daily schedule: node tools/make_schedule.mjs [days]
-// Writes site/data/schedule.json. Each day: [t1, t2, t3, t4, t5, reserve, fixedOrigin] (target ids).
+// Writes site/data/schedule.json. Each day: [t1, t2, t3, reserve, fixedOrigin] (target ids).
 //
 // Once the game is live, never regenerate days up to and including today: that would change past and
 // current puzzles (and the leaderboard worker validates against this file). To extend, use
@@ -21,7 +21,7 @@ if (keepUntil && existsSync('site/data/schedule.json')) {
   const days = [...keep];
   for (let i = keep.length; i < count; i++) {
     const recent = new Set(), recentOrigins = new Set();
-    for (const d of days.slice(Math.max(0, i - (NO_REPEAT_DAYS - 1)))) { d.slice(0, 6).forEach((id) => recent.add(id)); recentOrigins.add(d[6]); }
+    for (const d of days.slice(Math.max(0, i - (NO_REPEAT_DAYS - 1)))) { d.slice(0, -1).forEach((id) => recent.add(id)); recentOrigins.add(d.at(-1)); }
     const e = generateDay(addDays(old.start, i), targets, recent, recentOrigins);
     days.push([...e.targets, e.reserve, e.origin]);
   }

@@ -34,22 +34,23 @@ test('every scheduled day satisfies the rules', () => {
 
 test('no target repeats within 60 days (targets and reserves), no origin repeats within 60 days', () => {
   for (let i = 0; i < schedule.days.length; i++) {
-    const ids = schedule.days[i].slice(0, 6);
+    const ids = schedule.days[i].slice(0, -1);
     for (let j = Math.max(0, i - NO_REPEAT_DAYS + 1); j < i; j++) {
       const prev = schedule.days[j];
-      for (const id of ids) assert.ok(!prev.slice(0, 6).includes(id), `${id} on day ${i} repeats day ${j}`);
-      assert.notEqual(prev[6], schedule.days[i][6], `origin on day ${i} repeats day ${j}`);
+      for (const id of ids) assert.ok(!prev.slice(0, -1).includes(id), `${id} on day ${i} repeats day ${j}`);
+      assert.notEqual(prev.at(-1), schedule.days[i].at(-1), `origin on day ${i} repeats day ${j}`);
     }
   }
 });
 
-test('difficulty follows the weekday: Mondays are famous capitals, Saturdays have landmarks', () => {
+test('three places a day; difficulty follows the weekday: Mondays are famous capitals, Saturdays have a landmark', () => {
   for (let i = 0; i < 70; i++) {
     const day = addDays(schedule.start, i);
     const ts = entryAt(i).targets.map((id) => byId.get(id));
+    assert.equal(ts.length, 3);
     assert.deepEqual(ts.map((t) => t.t).sort(), [...WEEKDAY_TIERS[weekday(day)]].sort(), day);
     if (weekday(day) === 1) assert.ok(ts.every((t) => t.k === 'city' && t.t === 1));
-    if (weekday(day) === 6) assert.ok(ts.filter((t) => t.k !== 'city').length >= 2);
+    if (weekday(day) === 6) assert.ok(ts.filter((t) => t.k !== 'city').length >= 1);
   }
 });
 

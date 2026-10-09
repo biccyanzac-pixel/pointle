@@ -1,5 +1,17 @@
 # Pointle: build status (2026-10-09)
 
+## Update 2 (same day, after the owner's first play-test)
+- **3 places a day** (was 5), still seeded from the UTC date. The schedule was regenerated from puzzle #1, because only test plays existed. Weekday tiers are now Mon `[1,1,1]` → Sat `[4,5,5]` (≥ 1 landmark), Sun `[1,3,5]`. All schedule rules still hold over the 820 days: every place on a different continent, one near and one far from London, three different dip bands. Max score 300. The worker's "too fast" limit is now 6 s for all three.
+- **ridd-le layout**: jacob.gg wordmark (links to the hub). The game lives in one card; today's leaderboard card is always visible below it (no top nav). Then yesterday's places and winners per mode, then an **archive** (replay any past day; scores go on that day's separate "late" board, like ridd-le). How to play and privacy are in the footer. Light and dark themes come from ridd-le's tokens. Added to the jacob.gg hub.
+- **Map mode**: grab the arrow's white tip and drag it in 3D. The tip follows the cursor over a sphere, choosing the front or back side for continuity, so it can swing under the ground. Dragging elsewhere turns it. There's also a heading slider plus the tilt slider, and a compass dial at the top that rotates with the arrow.
+- **Phone mode**: a real compass dial (the rose turns so north on the dial points to real north, with your facing at the top marker) plus a tilt gauge.
+- **After each guess** the globe shows a live red arrow that follows the phone (or, in map mode, your drags on the radar and bar). The globe stays draggable. The locked guess is white, the true line green.
+- **AR**: a yellow "satnav" arrow floats just in front of the camera and points the true way, so it can't leave the frame. A hint says "turn right 40°, tilt down 25°" (or 🎯 when within 5°).
+- **Location on phones**: tries a quick fix, then retries with GPS. Errors now say why (blocked / timed out / unavailable / in-app browser / not https), with iPhone and Android instructions. The town picker stays as the fallback. *Root cause of the owner's failure is unknown*: the exact message shown is needed.
+- Worker: `is_late` column (migration `worker/migrations/0001_late_board.sql`, applied to the live DB). One entry per player, day, mode and board.
+- The one live row (a 5-place map score, 199/500) was removed because today's puzzle changed. **Mistake:** the export that was meant to back it up failed (Cloudflare API error 7403) and the delete ran anyway. It's recoverable with D1 Time Travel until 2026-10-16 (bookmark `00000002-00000004-000050ff-80f9bbaffcb9f0cadd23e14438ada1de`; restoring rolls back the whole DB, so re-run the migration after).
+
+
 All seven phases were built in one go (the owner asked for a playable live version to test, rather than stopping after each phase). Each phase is summarised below with its decisions, open questions and anything **unverified**.
 
 ## Flags (privacy, answers, cost)

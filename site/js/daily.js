@@ -36,6 +36,20 @@ export function weekStart(day) {
   return addDays(day, -((weekday(day) + 6) % 7));
 }
 
+/** Yesterday's board stays open this long after midnight UTC, for players who started before it. */
+export const GRACE_MS = 2 * 3600 * 1000;
+
+/**
+ * Does a submission for `day` go on the archive's late board? Today: no. Yesterday within the grace period
+ * (and not deliberately replayed from the archive): no. Anything older: yes.
+ */
+export function isLate(day, archive, now = new Date()) {
+  const today = dayKey(now);
+  if (day === today) return false;
+  const grace = day === addDays(today, -1) && now - Date.parse(`${today}T00:00:00Z`) < GRACE_MS;
+  return !(grace && !archive);
+}
+
 export function msUntilNextUtcDay(now = new Date()) {
   return Date.parse(`${addDays(dayKey(now), 1)}T00:00:00Z`) - now.getTime();
 }
@@ -59,15 +73,15 @@ export function mulberry32(seed) {
 }
 
 /**
- * The day's entry: { targets: [5 ids], reserve: id, origin: id }.
+ * The day's entry: { targets: [ids], reserve: id, origin: id }. Schedule rows are [...targets, reserve, origin].
  * `reserve` replaces any target that is too close to the player to point at (see game.js).
  * Days past the end of the pre-built schedule fall back to `fallback(day)` (seeded generator).
  */
 export function entryFor(day, schedule, fallback) {
   const i = daysBetween(schedule.start, day);
   if (i >= 0 && i < schedule.days.length) {
-    const [t1, t2, t3, t4, t5, reserve, origin] = schedule.days[i];
-    return { targets: [t1, t2, t3, t4, t5], reserve, origin };
+    const row = schedule.days[i];
+    return { targets: row.slice(0, -2), reserve: row.at(-2), origin: row.at(-1) };
   }
   return fallback ? fallback(day) : null;
 }

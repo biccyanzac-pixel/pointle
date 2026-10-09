@@ -12,19 +12,49 @@ export async function loadTowns() {
   return townData;
 }
 
-/** Ask the browser for the position (city-level accuracy is plenty). Resolves to { lat, lon } or throws. */
-export function requestPosition() {
+function getPosition(options) {
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) { reject(new Error('Location is not available in this browser.')); return; }
     navigator.geolocation.getCurrentPosition(
       (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude, accuracy: p.coords.accuracy }),
-      (e) => reject(new Error(e.code === 1 ? 'Location permission was declined.' : 'Could not get your location.')),
-      { enableHighAccuracy: false, maximumAge: 10 * 60 * 1000, timeout: 20000 },
-    );
+      reject, options);
   });
 }
 
-const fold = (s) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
+const isIOS = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const inAppBrowser = () => /FBAN|FBAV|Instagram|Line\/|Snapchat|; wv\)|GSA\//.test(navigator.userAgent);
+
+/** Human help for a failed location request. */
+export function locationHelp(code) {
+  if (!window.isSecureContext) return 'Location only works on the https:// version of the site.';
+  if (code === 1) {
+    if (inAppBrowser()) return 'This in-app browser blocks location. Open the page in Safari or Chrome instead (⋯ → Open in browser).';
+    return isIOS()
+      ? 'Location is blocked for this site. On iPhone: Settings → Privacy & Security → Location Services → turn it on, and set "Safari Websites" to "While Using the App". Then reload and try again.'
+      : "Location is blocked for this site. In Chrome: tap the icon left of the address bar → Permissions → Location → Allow, and check your phone's Location setting is on. Then try again.";
+  }
+  if (code === 3) return 'Getting your location took too long. Try again outdoors or with Wi-Fi on.';
+  return "Your phone couldn't work out where you are. Check Location is switched on in your phone's settings.";
+}
+
+/**
+ * Ask the browser for the position (city-level accuracy is plenty). Tries a quick low-accuracy fix first
+ * and, if that fails for a reason other than "denied", once more with GPS. Resolves to { lat, lon }.
+ * Rejects with an Error whose `help` says what to do.
+ */
+export async function requestPosition() {
+  if (!navigator.geolocation) throw Object.assign(new Error('Location is not available in this browser.'), { help: 'Pick your town instead.' });
+  try {
+    return await getPosition({ enableHighAccuracy: false, maximumAge: 10 * 60 * 1000, timeout: 12000 });
+  } catch (e) {
+    if (e.code !== 1) {
+      try { return await getPosition({ enableHighAccuracy: true, maximumAge: 0, timeout: 25000 }); } catch (e2) { e = e2; }
+    }
+    const msg = e.code === 1 ? 'Location permission was declined.' : 'Could not get your location.';
+    throw Object.assign(new Error(msg), { code: e.code, help: locationHelp(e.code) });
+  }
+}
+
+const fold = (s) => s.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
 
 /** Search towns by name prefix (then substring); results are { name, region, country, lat, lon }. */
 export async function searchTowns(query, limit = 12) {

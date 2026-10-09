@@ -19,15 +19,16 @@ CREATE TABLE IF NOT EXISTS results (
   device       TEXT NOT NULL CHECK (device IN ('phone', 'desktop')),
   name         TEXT NOT NULL,
   town         TEXT,              -- optional, shown only; never used for grouping or filtering
-  targets      TEXT NOT NULL,     -- JSON array of 5 target ids
-  errors       TEXT NOT NULL,     -- JSON array of 5 errors (degrees)
-  durations    TEXT NOT NULL,     -- JSON array of 5 durations (ms)
+  targets      TEXT NOT NULL,     -- JSON array of target ids (3 a day)
+  errors       TEXT NOT NULL,     -- JSON array of errors (degrees)
+  durations    TEXT NOT NULL,     -- JSON array of durations (ms)
   total        INTEGER NOT NULL CHECK (total >= 0 AND total <= 500),
-  submitted_at TEXT NOT NULL
+  submitted_at TEXT NOT NULL,
+  is_late      INTEGER NOT NULL DEFAULT 0   -- 1 = archive replay of a past day (separate "late" board)
 );
--- one entry per player per day per mode: the first submission counts
-CREATE UNIQUE INDEX IF NOT EXISTS results_player_day_mode ON results (player_id, day_key, mode);
-CREATE INDEX IF NOT EXISTS results_day_board ON results (day_key, mode, total DESC, submitted_at ASC);
+-- one entry per player per day per mode per board: the first submission counts
+CREATE UNIQUE INDEX IF NOT EXISTS results_player_day_mode_late ON results (player_id, day_key, mode, is_late);
+CREATE INDEX IF NOT EXISTS results_day_board ON results (day_key, mode, is_late, total DESC, submitted_at ASC);
 CREATE INDEX IF NOT EXISTS results_week_board ON results (week_key, mode);
 
 CREATE TABLE IF NOT EXISTS groups (

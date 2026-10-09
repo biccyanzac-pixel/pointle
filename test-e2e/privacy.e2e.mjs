@@ -4,32 +4,35 @@
 //   cd worker && npm run dev:local       (leaderboard on :8799, after npm run db:init:local)
 //   node test-e2e/privacy.e2e.mjs [siteUrl] [apiUrl]
 //
-// Plays a full map-mode game and a full sensor-mode game (synthetic orientation events on an emulated
-// phone) with a mocked GPS position, submits both to the leaderboard, opens practice and the boards, and
-// records EVERY request the page makes. Fails if any URL, header or body contains the coordinates (in any
-// common rounding), or if any request goes somewhere unexpected. Map imagery tiles are the one documented
+// Plays a full map-mode game (including grabbing and dragging the 3D arrow) and a full sensor-mode game
+// (synthetic orientation events on an emulated phone) with a mocked GPS position, submits both to the
+// leaderboard, checks the always-visible board, practice gating and the archive card, and records EVERY
+// request the page makes. Fails if any URL, header or body contains the coordinates (in any common
+// rounding), or if any request goes somewhere unexpected. Map imagery tiles are the one documented
 // location-related request: they must be at zoom <= 9 (about 50 km tiles) and contain no coordinates.
 import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 
 const SITE = process.argv[2] || 'http://localhost:8080/';
 const API = process.argv[3] || 'http://127.0.0.1:8799';
 const POS = { latitude: 53.80076, longitude: -1.54908 };   // Leeds, as a mock GPS fix
-const shots = new URL('./shots/', import.meta.url);
-mkdirSync(shots, { recursive: true });
+const N = 3;
+const shotDir = fileURLToPath(new URL('./shots/', import.meta.url));
+mkdirSync(shotDir, { recursive: true });
+const shot = (page, name, fullPage = true) => page.screenshot({ path: `${shotDir}${name}.png`, fullPage });
 
 const browserPath = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
   '/usr/bin/google-chrome', '/usr/bin/chromium'].find(existsSync);
 
-// Every way the coordinates might be written: 53.8, 53.80, 53.801, 5380, -1.549, -1.55, 1.549 ...
+// Every way the coordinates might be written: 53.80, 53.801, -1.549, 1.5491 ...
 function coordinatePatterns({ latitude, longitude }) {
   const pats = new Set();
   for (const v of [latitude, longitude]) {
-    for (const dp of [1, 2, 3, 4, 5]) pats.add(Math.abs(v).toFixed(dp));
+    for (const dp of [2, 3, 4, 5]) pats.add(Math.abs(v).toFixed(dp));
     pats.add(String(Math.abs(v)));
   }
-  pats.delete('1.5'); pats.delete('53.8'); // 1-dp forms are too generic to search for alone; checked as pairs below
   return [...pats];
 }
 const PATTERNS = coordinatePatterns(POS);
@@ -80,39 +83,54 @@ for (const leak of [
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const visible = (page, sel) => page.waitForSelector(`${sel}:not([hidden])`);
+
+async function boardShows(page, text) {
+  await page.waitForFunction((t) => document.querySelector('#rows').textContent.includes(t), text, { timeout: 10000 });
+}
 
 async function playMap(page) {
   await page.click('#go-map');
   await page.click('#loc-gps');
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < N; i++) {
     await page.waitForSelector('#play:not([hidden]) .map-canvas');
-    const box = await page.locator('.map-canvas').boundingBox();
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 + 80 + i * 20, box.y + box.height / 2, { steps: 5 });
-    await page.mouse.up();
-    await page.locator('#tilt').fill(String(-10 - i * 10));
-    await sleep(2200);  // the server rejects games faster than 10 s in total
-    if (i === 0) await page.screenshot({ path: new URL('map-play.png', shots).pathname.slice(1) });
+    await page.waitForTimeout(300);
+    if (i === 0) {
+      // grab the arrow's tip and drag it: the direction must follow
+      const before = await page.evaluate(() => { const m = window.__pointle.mapView(); return { az: m.az, el: m.el }; });
+      const tip = await page.evaluate(() => window.__pointle.mapView().tipScreen());
+      await page.mouse.move(tip.x, tip.y);
+      await page.mouse.down();
+      await page.mouse.move(tip.x + 60, tip.y + 90, { steps: 8 });
+      await page.mouse.up();
+      const after = await page.evaluate(() => { const m = window.__pointle.mapView(); return { az: m.az, el: m.el }; });
+      assert.ok(Math.abs(after.az - before.az) > 2 || Math.abs(after.el - before.el) > 2, `dragging the arrow moved it (${JSON.stringify(before)} -> ${JSON.stringify(after)})`);
+      // the heading slider and compass follow
+      const slider = Number(await page.inputValue('#heading'));
+      assert.ok(Math.abs(slider - after.az) < 1, 'heading slider follows the arrow');
+      await shot(page, 'map-play', false);
+    } else {
+      await page.locator('#heading').fill(String(40 + i * 70));
+    }
+    await page.locator('#tilt').fill(String(-10 - i * 15));
+    await sleep(2100);   // the server rejects games faster than 6 s in total
     await page.click('#lock');
-    await page.waitForSelector('#reveal:not([hidden])');
-    await page.waitForTimeout(600);
-    if (i === 0) await page.screenshot({ path: new URL('map-reveal.png', shots).pathname.slice(1), fullPage: true });
-    // sweep the radar and bar
+    await visible(page, '#reveal');
+    await page.waitForTimeout(700);
+    if (i === 0) await shot(page, 'map-reveal');
     const rb = await page.locator('#radar').boundingBox();
-    await page.mouse.click(rb.x + rb.width * 0.8, rb.y + rb.height * 0.3);
+    await page.mouse.click(rb.x + rb.width * 0.8, rb.y + rb.height * 0.3);   // sweep: live arrow on the globe
     await page.click('#next');
   }
-  await page.waitForSelector('#done:not([hidden])');
+  await visible(page, '#done');
   await page.fill('#nick', 'E2E map');
   await page.fill('#town', 'Leeds');
-  await page.click('#submit-form button');
-  await page.waitForSelector('#board:not([hidden])', { timeout: 10000 });
-  await page.waitForFunction(() => document.querySelector('#board-list').children.length > 0, null, { timeout: 10000 });
-  await page.screenshot({ path: new URL('map-board.png', shots).pathname.slice(1), fullPage: true });
-  const board = await page.textContent('#board-list');
-  assert.match(board, /E2E map/);
+  await page.click('#submit-btn');
+  await visible(page, '#submitted-note');
+  await boardShows(page, 'E2E map');
+  const board = await page.textContent('#rows');
   assert.match(board, /Leeds/);
+  await shot(page, 'map-done');
 }
 
 async function playSensor(page) {
@@ -127,55 +145,58 @@ async function playSensor(page) {
   });
   await page.click('#go-sensor');
   await page.click('#loc-gps');
-  await page.waitForSelector('#setup:not([hidden])');
+  await visible(page, '#setup');
   await page.click('#enable-compass');
   await page.waitForSelector('#start-sensor:not([disabled])');
-  await page.screenshot({ path: new URL('sensor-setup.png', shots).pathname.slice(1), fullPage: true });
+  await shot(page, 'sensor-setup');
   await page.click('#start-sensor');
-  for (let i = 0; i < 5; i++) {
-    await page.waitForSelector('#play:not([hidden])');
+  for (let i = 0; i < N; i++) {
+    await visible(page, '#play');
     await page.evaluate((k) => { window.__orient = { alpha: 40 * k, beta: 60 + k * 5, gamma: 0 }; }, i);
-    await sleep(2200);
-    const heading = await page.textContent('#read-heading');
-    assert.match(heading, /\d+°|—/);
-    if (i === 0) await page.screenshot({ path: new URL('sensor-play.png', shots).pathname.slice(1) });
+    await sleep(2100);
+    assert.match(await page.textContent('#read-heading'), /\d+°|straight/);
+    assert.ok(await page.isVisible('#play-instrument svg.compass'), 'compass dial on screen');
+    if (i === 0) await shot(page, 'sensor-play', false);
     await page.click('#lock');
-    await page.waitForSelector('#reveal:not([hidden])');
+    await visible(page, '#reveal');
+    // move the phone: the live arrow on the globe follows
+    await page.evaluate(() => { window.__orient = { alpha: 200, beta: 40, gamma: 0 }; });
     await page.waitForTimeout(500);
-    if (i === 0) await page.screenshot({ path: new URL('sensor-reveal.png', shots).pathname.slice(1), fullPage: true });
+    if (i === 0) await shot(page, 'sensor-reveal');
     await page.click('#next');
   }
-  await page.waitForSelector('#done:not([hidden])');
-  await page.screenshot({ path: new URL('sensor-done.png', shots).pathname.slice(1), fullPage: true });
+  await visible(page, '#done');
   await page.fill('#nick', 'E2E phone');
-  await page.click('#submit-form button');
-  await page.waitForSelector('#board:not([hidden])', { timeout: 10000 });
+  await page.click('#submit-btn');
+  await visible(page, '#submitted-note');
+  await boardShows(page, 'E2E phone');
+  await shot(page, 'sensor-done');
   // practice is unlocked after finishing
-  await page.click('[data-go="home"]');
+  await page.click('#done [data-home]');
   await page.click('#go-practice');
-  await page.waitForSelector('#practice:not([hidden])');
+  await visible(page, '#practice');
   const opts = await page.$$eval('#prac-pick option', (o) => o.map((x) => x.value));
   assert.ok(opts.includes('free'), 'practice unlocked after playing');
   await page.selectOption('#prac-pick', 'free');
   await page.waitForTimeout(500);
-  await page.screenshot({ path: new URL('practice-free.png', shots).pathname.slice(1), fullPage: true });
+  await shot(page, 'practice-free');
 }
 
 async function practiceBeforePlaying(page) {
   await page.click('#go-practice');
   await page.click('#loc-gps');
-  await page.waitForSelector('#practice:not([hidden])');
+  await visible(page, '#practice');
   const opts = await page.$$eval('#prac-pick option', (o) => o.map((x) => x.value));
-  assert.deepEqual(opts, ['random'], 'before playing, practice offers random targets only');
+  assert.deepEqual(opts, ['random'], 'before playing, practice offers random places only');
   const today = await page.evaluate(() => { const { S } = window.__pointle; return [...S.entry.targets, S.entry.reserve].map((id) => S.byId.get(id).n); });
   for (let k = 0; k < 10; k++) {
     const name = await page.textContent('#prac-name');
-    assert.ok(!today.some((t) => name.startsWith(t)), `practice target ${name} is one of today's`);
+    assert.ok(!today.some((t) => name.startsWith(t)), `practice place ${name} is one of today's`);
     await page.click('#prac-new');
   }
   await page.click('#prac-check');
-  await page.screenshot({ path: new URL('practice-before.png', shots).pathname.slice(1), fullPage: true });
-  await page.click('[data-go="home"]');
+  await shot(page, 'practice-before');
+  await page.click('#practice [data-home]');
 }
 
 const browser = await chromium.launch({ executablePath: browserPath, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -187,13 +208,18 @@ try {
   record(p1, 'desktop');
   p1.on('pageerror', (e) => pageErrors.push(`desktop: ${e.message}`));
   await p1.goto(`${SITE}?api=${encodeURIComponent(API)}`);
-  await p1.waitForSelector('#home:not([hidden])');
+  await visible(p1, '#home');
+  await p1.waitForFunction(() => /Pointle #\d/.test(document.querySelector('#daynum').textContent));
   assert.ok(await p1.isVisible('#qr-box'), 'desktop shows the QR code');
   assert.ok(!(await p1.isVisible('#go-sensor')), 'desktop hides sensor mode');
-  await p1.screenshot({ path: new URL('home-desktop.png', shots).pathname.slice(1), fullPage: true });
+  assert.ok(await p1.isVisible('#board'), 'leaderboard is always visible');
+  assert.ok(await p1.isVisible('#archive'), 'archive card is visible');
+  await p1.click('#archive-browse');
+  assert.match(await p1.textContent('#archive-list'), /starts tomorrow|Pointle #/);
+  await shot(p1, 'home-desktop');
   await practiceBeforePlaying(p1);
   await playMap(p1);
-  console.log('ok - desktop map game, leaderboard, practice gate');
+  console.log('ok - desktop map game (arrow drag, sliders), leaderboard, practice gate');
 
   // phone: sensor mode with synthetic orientation events
   const phone = await browser.newContext({ geolocation: POS, permissions: ['geolocation', 'accelerometer', 'gyroscope', 'magnetometer'], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
@@ -201,20 +227,33 @@ try {
   record(p2, 'phone');
   p2.on('pageerror', (e) => pageErrors.push(`phone: ${e.message}`));
   await p2.goto(`${SITE}?api=${encodeURIComponent(API)}`);
-  await p2.waitForSelector('#home:not([hidden])');
+  await visible(p2, '#home');
   assert.ok(await p2.isVisible('#go-sensor'), 'phone shows sensor mode');
-  await p2.screenshot({ path: new URL('home-phone.png', shots).pathname.slice(1), fullPage: true });
+  await shot(p2, 'home-phone');
   await playSensor(p2);
-  console.log('ok - phone sensor game, practice unlocked');
+  console.log('ok - phone sensor game (compass dial, live globe arrow), practice unlocked');
 
-  // localStorage must not hold coordinates either
+  // a denied location request explains what to do
+  const denied = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const p3 = await denied.newPage();
+  record(p3, 'denied');
+  await p3.goto(`${SITE}?api=${encodeURIComponent(API)}`);
+  await visible(p3, '#home');
+  await p3.click('#go-map');
+  await p3.click('#loc-gps');
+  await visible(p3, '#loc-msg');
+  assert.match(await p3.textContent('#loc-msg'), /declined|blocked|location/i);
+  await shot(p3, 'location-denied');
+  console.log('ok - denied location shows help');
+
   for (const p of [p1, p2]) {
     const ls = await p.evaluate(() => JSON.stringify(localStorage));
     for (const pat of PATTERNS) assert.ok(!ls.includes(pat), `localStorage contains ${pat}`);
   }
   console.log('ok - no coordinates in localStorage');
 } finally {
-  await browser.close();
+  // closing can hang on Windows with several contexts open; don't let it block the verdict
+  await Promise.race([browser.close(), sleep(5000)]);
 }
 
 assert.deepEqual(pageErrors, [], 'page errors');
@@ -224,3 +263,4 @@ console.log(`checked ${requests.length} requests to: ${hosts.join(', ')}`);
 assert.deepEqual(problems, [], 'privacy problems');
 assert.ok(requests.some((r) => r.url.includes('/api/submit') && r.body.includes('E2E map')), 'the test did submit');
 console.log('ok - privacy: no request contained the coordinates');
+process.exit(0);

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { scoreFor, totalScore, describeMiss, shareText, encodeResult, decodeResult } from '../site/js/scoring.js';
-import { dayKey, puzzleNumber, weekday, weekStart, msUntilNextUtcDay, isValidDay, addDays, mulberry32, hashString } from '../site/js/daily.js';
+import { scoreFor, totalScore, describeMiss, shareText, encodeResult, decodeResult, MAX_TOTAL } from '../site/js/scoring.js';
+import { dayKey, puzzleNumber, weekday, weekStart, msUntilNextUtcDay, isValidDay, addDays, mulberry32, hashString, isLate } from '../site/js/daily.js';
 
 test('score: 100 within 5 deg, linear to 0 at 90 deg', () => {
   assert.equal(scoreFor(0), 100);
@@ -15,6 +15,7 @@ test('score: 100 within 5 deg, linear to 0 at 90 deg', () => {
   assert.equal(scoreFor(22), 80);
   for (let e = 5; e < 90; e += 0.5) assert.ok(scoreFor(e) >= scoreFor(e + 0.5), 'monotonic');
   assert.equal(totalScore([0, 5, 47.5, 90, 22]), 330);
+  assert.equal(MAX_TOTAL, 300);
 });
 
 test('miss description', () => {
@@ -26,21 +27,20 @@ test('miss description', () => {
 test('share text has the scores and no coordinates', () => {
   const txt = shareText(12, [
     { name: 'Tokyo', error: 12.2 }, { name: 'Lima', error: 31 }, { name: 'Cairo', error: 4 },
-    { name: 'Oslo', error: 2 }, { name: 'Perth', error: 70 },
   ], 'https://example.org/pointle/');
   assert.match(txt, /^Pointle #12 /);
-  assert.match(txt, /🎯 Tokyo 12° · Lima 31° · Cairo 4° · Oslo 2° · Perth 70° — \d+\/500/);
+  assert.match(txt, /🎯 Tokyo 12° · Lima 31° · Cairo 4° — \d+\/300/);
   assert.ok(!/\d+\.\d{2,}/.test(txt), 'no decimal coordinates');
 });
 
 test('share link encoding round-trips and rejects junk', () => {
-  const r = { day: '2026-10-09', mode: 'fixed-map', errors: [0, 4.2, 31, 179.9, 90.05] };
+  const r = { day: '2026-10-09', mode: 'fixed-map', errors: [0, 4.2, 179.9] };
   const code = encodeResult(r);
   assert.match(code, /^20261009\.3\./);
   const back = decodeResult(code);
   assert.equal(back.day, r.day);
   assert.equal(back.mode, r.mode);
-  assert.deepEqual(back.errors, [0, 4.2, 31, 179.9, 90.1]);
+  assert.deepEqual(back.errors, [0, 4.2, 179.9]);
   for (const bad of ['', 'x', '2026-10-09.0.1', '20261009.9.1', '20261009.0.zzz', '20261009.0']) assert.equal(decodeResult(bad), null, bad);
 });
 
@@ -62,6 +62,16 @@ test('days are UTC dates: timezone edge cases', () => {
   assert.equal(addDays('2028-02-28', 1), '2028-02-29');
   assert.ok(isValidDay('2028-02-29') && !isValidDay('2027-02-29') && !isValidDay('2026-1-01'));
   assert.ok(!isValidDay('2026-13-01') && !isValidDay('2026-02-30') && !isValidDay(null));
+});
+
+test('late (archive) board: today never; yesterday only after the 2 h grace or when replayed; older always', () => {
+  const at = (iso) => new Date(iso);
+  assert.equal(isLate('2026-10-12', false, at('2026-10-12T15:00:00Z')), false);
+  assert.equal(isLate('2026-10-12', true, at('2026-10-12T15:00:00Z')), false);
+  assert.equal(isLate('2026-10-11', false, at('2026-10-12T01:30:00Z')), false);  // finished just after midnight
+  assert.equal(isLate('2026-10-11', true, at('2026-10-12T01:30:00Z')), true);    // chosen from the archive
+  assert.equal(isLate('2026-10-11', false, at('2026-10-12T02:30:00Z')), true);
+  assert.equal(isLate('2026-10-01', false, at('2026-10-12T00:10:00Z')), true);
 });
 
 test('seeded RNG is deterministic', () => {

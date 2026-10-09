@@ -5,26 +5,26 @@
  * numbers the browser computed and closes the cheap holes:
  *   - player ids/tokens are issued here (/api/session); submissions must present the token.
  *   - the day must be today (UTC), or yesterday within a short grace period for late finishers;
- *     never a day that hasn't started.
- *   - the five targets must belong to that day (this server's own copy of the schedule, bundled at deploy);
+ *     never a day that hasn't started. Older days (from puzzle #1) are archive replays and go on a
+ *     separate "late" board that never changes the day's original results.
+ *   - the targets must belong to that day (this server's own copy of the schedule, bundled at deploy);
  *     fixed-spot modes must play exactly the fixed spot's targets.
  *   - the total must equal the sum of per-target scores computed from the errors (same scoring code).
- *   - impossible timings are rejected (all five in under 10 s, or any in under 0.5 s).
+ *   - impossible timings are rejected (all three in under 6 s, or any in under 0.5 s).
  *   - nicknames, towns and group names pass a profanity filter; per-IP rate limits.
  *   - one entry per player, day and mode (the first counts); rows are insert-only.
  * Not defended (by design): a modified browser reporting invented errors. Boards say they are honour-based.
  */
-import { entryFor, isValidDay, addDays, weekStart, dayKey } from '../../site/js/daily.js';
+import { entryFor, isValidDay, weekStart, dayKey, EPOCH, isLate } from '../../site/js/daily.js';
 import { generateDay, playableTargets } from '../../site/js/rules.js';
-import { totalScore } from '../../site/js/scoring.js';
+import { totalScore, TARGETS_PER_DAY as N, MAX_TOTAL } from '../../site/js/scoring.js';
 import { checkName, checkTown, cleanText, isProfane } from '../../site/js/names.js';
 import schedule from '../../site/data/schedule.json';
 import targetData from '../../site/data/targets.json';
 
 const MODES = ['sensor', 'map', 'fixed-sensor', 'fixed-map'];
 const BOARD_SIZE = 25;
-const GRACE_MS = 2 * 3600 * 1000;       // yesterday's board stays open for 2 h after midnight UTC
-const MIN_TOTAL_MS = 10_000;
+const MIN_TOTAL_MS = 6_000;
 const MIN_TARGET_MS = 500;
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -38,14 +38,12 @@ export function checkSubmission(b, now = new Date()) {
   if (!isValidDay(b.day)) return 'Invalid day.';
   const today = dayKey(now);
   if (b.day > today) return "That day hasn't started yet.";
-  if (b.day < today && !(b.day === addDays(today, -1) && now - Date.parse(`${today}T00:00:00Z`) < GRACE_MS)) {
-    return "That day's leaderboard has closed.";
-  }
+  if (b.day < EPOCH) return 'There was no Pointle that day.';
   if (!MODES.includes(b.mode)) return 'Unknown mode.';
   if (!['phone', 'desktop'].includes(b.device)) return 'Unknown device.';
   if (b.mode.endsWith('sensor') && b.device !== 'phone') return 'Sensor mode is phone-only.';
   const { targets, errors, durations } = b;
-  if (!Array.isArray(targets) || targets.length !== 5 || new Set(targets).size !== 5) return 'Need five different targets.';
+  if (!Array.isArray(targets) || targets.length !== N || new Set(targets).size !== N) return `Need ${N} different targets.`;
   const entry = entryForDay(b.day);
   const allowed = new Set([...entry.targets, entry.reserve]);
   if (!targets.every((id) => allowed.has(id))) return "Those aren't that day's targets. Refresh the page.";
@@ -53,9 +51,9 @@ export function checkSubmission(b, now = new Date()) {
     const fixed = byId.get(entry.origin);
     if (playableTargets(entry, fixed, byId).join() !== targets.join()) return "Those aren't the fixed spot's targets.";
   }
-  if (!Array.isArray(errors) || errors.length !== 5 || !errors.every((e) => typeof e === 'number' && e >= 0 && e <= 180)) return 'Bad errors.';
-  if (b.total !== totalScore(errors)) return "Score doesn't add up.";
-  if (!Array.isArray(durations) || durations.length !== 5 || !durations.every((d) => Number.isInteger(d) && d >= 0 && d < 86400000)) return 'Bad timings.';
+  if (!Array.isArray(errors) || errors.length !== N || !errors.every((e) => typeof e === 'number' && e >= 0 && e <= 180)) return 'Bad errors.';
+  if (b.total !== totalScore(errors) || b.total > MAX_TOTAL) return "Score doesn't add up.";
+  if (!Array.isArray(durations) || durations.length !== N || !durations.every((d) => Number.isInteger(d) && d >= 0 && d < 86400000)) return 'Bad timings.';
   if (durations.some((d) => d < MIN_TARGET_MS) || durations.reduce((s, d) => s + d, 0) < MIN_TOTAL_MS) return 'That was impossibly fast.';
   return null;
 }
@@ -122,42 +120,44 @@ async function handleSubmit(request, env, ip) {
   if (town.error) return fail(request, env, 'bad_town', town.error, 400);
   const problem = checkSubmission(b);
   if (problem) return fail(request, env, 'bad_result', problem, 400);
+  const late = isLate(b.day, b.archive === true) ? 1 : 0;
   try {
     await env.DB.prepare(
-      `INSERT INTO results (id, player_id, day_key, week_key, mode, device, name, town, targets, errors, durations, total, submitted_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO results (id, player_id, day_key, week_key, mode, device, name, town, targets, errors, durations, total, submitted_at, is_late)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(crypto.randomUUID(), b.playerId, b.day, weekStart(b.day), b.mode, b.device, name.value, town.value,
-      JSON.stringify(b.targets), JSON.stringify(b.errors), JSON.stringify(b.durations), b.total, new Date().toISOString()).run();
+      JSON.stringify(b.targets), JSON.stringify(b.errors), JSON.stringify(b.durations), b.total, new Date().toISOString(), late).run();
   } catch (e) {
-    if (String(e).includes('UNIQUE')) return fail(request, env, 'already', "You've already submitted for this mode today. Your first score counts.", 409);
+    if (String(e).includes('UNIQUE')) return fail(request, env, 'already', "You've already submitted for this mode and day. Your first score counts.", 409);
     throw e;
   }
-  return json(request, env, { ok: true });
+  return json(request, env, { ok: true, late: !!late });
 }
 
-export async function fetchBoard(env, { mode, period, day, group, playerId }) {
+export async function fetchBoard(env, { mode, period, day, group, playerId, late = false }) {
   const groupClause = group ? 'AND r.player_id IN (SELECT player_id FROM group_members WHERE code = ?)' : '';
   let rows;
   if (period === 'week') {
     const wk = weekStart(day);
     const q = `SELECT r.player_id, SUM(r.total) AS total, COUNT(*) AS days, MIN(r.submitted_at) AS first,
-        (SELECT r2.name FROM results r2 WHERE r2.player_id = r.player_id AND r2.week_key = ?1 AND r2.mode = ?2 ORDER BY r2.submitted_at DESC LIMIT 1) AS name,
-        (SELECT r2.town FROM results r2 WHERE r2.player_id = r.player_id AND r2.week_key = ?1 AND r2.mode = ?2 ORDER BY r2.submitted_at DESC LIMIT 1) AS town,
-        (SELECT r2.device FROM results r2 WHERE r2.player_id = r.player_id AND r2.week_key = ?1 AND r2.mode = ?2 ORDER BY r2.submitted_at DESC LIMIT 1) AS device
-      FROM results r WHERE r.week_key = ?1 AND r.mode = ?2 ${group ? 'AND r.player_id IN (SELECT player_id FROM group_members WHERE code = ?3)' : ''}
+        (SELECT r2.name FROM results r2 WHERE r2.player_id = r.player_id AND r2.week_key = ?1 AND r2.mode = ?2 AND r2.is_late = 0 ORDER BY r2.submitted_at DESC LIMIT 1) AS name,
+        (SELECT r2.town FROM results r2 WHERE r2.player_id = r.player_id AND r2.week_key = ?1 AND r2.mode = ?2 AND r2.is_late = 0 ORDER BY r2.submitted_at DESC LIMIT 1) AS town,
+        (SELECT r2.device FROM results r2 WHERE r2.player_id = r.player_id AND r2.week_key = ?1 AND r2.mode = ?2 AND r2.is_late = 0 ORDER BY r2.submitted_at DESC LIMIT 1) AS device
+      FROM results r WHERE r.week_key = ?1 AND r.mode = ?2 AND r.is_late = 0 ${group ? 'AND r.player_id IN (SELECT player_id FROM group_members WHERE code = ?3)' : ''}
       GROUP BY r.player_id ORDER BY total DESC, first ASC`;
     const stmt = env.DB.prepare(q);
     rows = (await (group ? stmt.bind(wk, mode, group) : stmt.bind(wk, mode)).all()).results ?? [];
   } else {
     const q = `SELECT r.player_id, r.name, r.town, r.device, r.total, 1 AS days FROM results r
-      WHERE r.day_key = ? AND r.mode = ? ${groupClause} ORDER BY r.total DESC, r.submitted_at ASC`;
+      WHERE r.day_key = ? AND r.mode = ? AND r.is_late = ? ${groupClause} ORDER BY r.total DESC, r.submitted_at ASC`;
     const stmt = env.DB.prepare(q);
-    rows = (await (group ? stmt.bind(day, mode, group) : stmt.bind(day, mode)).all()).results ?? [];
+    const lateFlag = late ? 1 : 0;
+    rows = (await (group ? stmt.bind(day, mode, lateFlag, group) : stmt.bind(day, mode, lateFlag)).all()).results ?? [];
   }
   const view = (r, i) => ({ rank: i + 1, name: r.name, town: r.town, device: r.device, total: r.total, days: r.days, you: r.player_id === playerId });
   const yi = playerId ? rows.findIndex((r) => r.player_id === playerId) : -1;
   return {
-    mode, period, day, from: period === 'week' ? weekStart(day) : day, players: rows.length,
+    mode, period, day, late: !!late, from: period === 'week' ? weekStart(day) : day, players: rows.length,
     top: rows.slice(0, BOARD_SIZE).map(view), you: yi >= BOARD_SIZE ? view(rows[yi], yi) : null,
   };
 }
@@ -171,7 +171,8 @@ async function handleBoard(request, env) {
   if (!MODES.includes(mode)) return fail(request, env, 'bad_mode', 'Unknown mode.', 400);
   if (!isValidDay(day)) return fail(request, env, 'bad_day', 'Invalid day.', 400);
   if (group && !/^[A-Z0-9]{6}$/.test(group)) return fail(request, env, 'bad_group', 'Invalid group code.', 400);
-  return json(request, env, await fetchBoard(env, { mode, period, day, group, playerId: u.searchParams.get('playerId') }));
+  const late = u.searchParams.get('late') === '1';
+  return json(request, env, await fetchBoard(env, { mode, period, day, group, late, playerId: u.searchParams.get('playerId') }));
 }
 
 function newCode() {

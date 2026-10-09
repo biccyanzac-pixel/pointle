@@ -35,10 +35,11 @@ export async function submit(entry) {
   return call('/api/submit', { method: 'POST', body: { ...s, ...entry } });
 }
 
-export async function board({ mode, period = 'day', day, group }) {
+export async function board({ mode, period = 'day', day, group, late = false }) {
   const s = await session().catch(() => null);
   const q = new URLSearchParams({ mode, period, day });
   if (group) q.set('group', group);
+  if (late) q.set('late', '1');
   if (s) q.set('playerId', s.playerId);
   return call(`/api/board?${q}`);
 }

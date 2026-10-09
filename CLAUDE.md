@@ -8,4 +8,6 @@ Critical rules:
 - After changing `site/data/*.json` or `site/js/{daily,rules,scoring,names,geo}.js`, redeploy the worker (`cd worker && npx wrangler deploy`): it bundles them to validate submissions.
 - Free/non-commercial project (EOX imagery is CC BY-NC-SA): ask the owner before adding any paid service, restrictive-licence dependency or analytics.
 - Commit as `biccyanzac-pixel <285977456+biccyanzac-pixel@users.noreply.github.com>` (repo-local config). Deploy the site with `git subtree split --prefix site -b gh-pages && git push -f origin gh-pages`.
+- Schema changes: add `worker/migrations/000N_*.sql`, run it on the live DB (`npm run db:migrate` style) BEFORE deploying code that needs it, and export a backup first, checking the export actually succeeded.
+- Three places a day (`TARGETS_PER_DAY` in `site/js/scoring.js`); schedule rows are `[...targets, reserve, origin]`.
 - Local ports: site 8080, worker 8799 (8798 is predictle's, 8797 yogle's).

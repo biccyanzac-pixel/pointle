@@ -3,6 +3,7 @@
 // days past the end of the pre-built schedule.
 import { centralAngle, DEG, MEAN_RADIUS_KM } from './geo.js';
 import { addDays, hashString, mulberry32, weekday } from './daily.js';
+import { TARGETS_PER_DAY } from './scoring.js';
 
 /** A typical UK/European player, used to make sure each day mixes near and far targets. */
 export const REFERENCE_PLAYER = { lat: 51.5074, lon: -0.1278, name: 'London' };
@@ -15,13 +16,13 @@ export const FAR_KM = 9000;
 // Difficulty tiers per weekday (0 = Sunday). Monday: famous capitals; rising to Saturday: smaller cities
 // and landmarks. Sunday is a wildcard mix of every tier.
 export const WEEKDAY_TIERS = {
-  1: [1, 1, 1, 1, 1],
-  2: [1, 1, 2, 2, 2],
-  3: [1, 2, 2, 3, 3],
-  4: [2, 2, 3, 3, 4],
-  5: [2, 3, 3, 4, 4],
-  6: [3, 4, 5, 5, 5],
-  0: [1, 2, 3, 4, 5],
+  1: [1, 1, 1],
+  2: [1, 2, 2],
+  3: [2, 2, 3],
+  4: [2, 3, 4],
+  5: [3, 4, 4],
+  6: [4, 5, 5],
+  0: [1, 3, 5],
 };
 export const WEEKDAY_NAMES = ['Sunday mix', 'Famous capitals', 'Capitals and big cities', 'Big cities', 'Cities and sights',
   'Cities and sights', 'Smaller cities and landmarks'];
@@ -38,7 +39,7 @@ const dipBand = (t) => Math.min(5, Math.floor(centralAngle(REFERENCE_PLAYER, t) 
 export function checkDay(day, entry, byId) {
   const problems = [];
   const ts = entry.targets.map((id) => byId.get(id));
-  if (ts.length !== 5 || ts.some((t) => !t)) return ['needs 5 known targets'];
+  if (ts.length !== TARGETS_PER_DAY || ts.some((t) => !t)) return [`needs ${TARGETS_PER_DAY} known targets`];
   const reserve = byId.get(entry.reserve), origin = byId.get(entry.origin);
   if (!reserve) problems.push('unknown reserve');
   if (!origin || origin.k !== 'city' || origin.t > 3) problems.push('origin must be a well-known city');
@@ -60,7 +61,7 @@ export function checkDay(day, entry, byId) {
   if (want.join() !== got.join()) problems.push(`tiers ${got} should be ${want}`);
   if (reserve && reserve.t !== Math.max(...tiers)) problems.push('reserve tier');
   const nonCity = ts.filter((t) => t.k !== 'city').length;
-  if (weekday(day) === 6 ? nonCity < 2 : nonCity > 2) problems.push(`${nonCity} landmarks`);
+  if (weekday(day) === 6 ? nonCity < 1 : nonCity > 1) problems.push(`${nonCity} landmarks`);
   return problems;
 }
 
@@ -80,9 +81,9 @@ export function generateDay(day, targets, recent = new Set(), recentOrigins = ne
   for (let i = 0; i < maxTries; i++) {
     const chosen = [];
     for (const k of tiers) {
-      // Saturdays lean on landmarks: first two picks come from the non-city part of the pool when possible
+      // Saturdays include a landmark: the first pick comes from the non-city part of the pool when possible
       let pool = pools[k];
-      if (sat && chosen.length < 2) {
+      if (sat && chosen.length < 1) {
         const lm = pools[k].filter((t) => t.k !== 'city');
         if (lm.length) pool = lm;
       }
@@ -110,8 +111,8 @@ export function buildSchedule(start, count, targets) {
     const day = addDays(start, i);
     const recent = new Set(), recentOrigins = new Set();
     for (const d of days.slice(Math.max(0, i - (NO_REPEAT_DAYS - 1)))) {
-      d.slice(0, 6).forEach((id) => recent.add(id));
-      recentOrigins.add(d[6]);
+      d.slice(0, -1).forEach((id) => recent.add(id));
+      recentOrigins.add(d.at(-1));
     }
     const e = generateDay(day, targets, recent, recentOrigins);
     days.push([...e.targets, e.reserve, e.origin]);

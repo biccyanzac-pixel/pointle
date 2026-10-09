@@ -1,6 +1,6 @@
 # Pointle
 
-A daily game: five places a day, and you point at each one in a **straight line through the Earth**. Nearby places are just below the horizon, and the other side of the world is nearly straight down. Your score is the 3D angle between where you pointed and the true direction.
+A daily game: three places a day, and you point at each one in a **straight line through the Earth**. Nearby places are just below the horizon, and the other side of the world is nearly straight down. Your score is the 3D angle between where you pointed and the true direction.
 
 **Play:** https://biccyanzac-pixel.github.io/pointle/  ·  sensor test page: https://biccyanzac-pixel.github.io/pointle/sensors.html
 
@@ -22,7 +22,7 @@ npm install
 node tools/serve.mjs                 # http://localhost:8080/  (geolocation works on localhost; phone sensors need HTTPS)
 npm test                             # unit tests: geometry, WMM declination, orientation maths, scoring, dates, schedule rules
 cd worker && npm install && npm run db:init:local && npm run dev:local     # leaderboard on :8799
-cd worker && npm test                # 19 API checks against the local worker
+cd worker && npm test                # 22 API checks against the local worker
 node test-e2e/privacy.e2e.mjs        # browser end-to-end + privacy check (needs both servers; uses installed Chrome/Edge)
 ```
 Open the site against the local worker with `http://localhost:8080/?api=http://127.0.0.1:8799`.
@@ -37,17 +37,18 @@ node tools/build_land.mjs            # coastlines
 ```
 
 ## Deploy
-Same pattern as Yogle: GitHub Pages serves the `gh-pages` branch (a mirror of `site/`), and the leaderboard is a Cloudflare Worker + D1 database.
+Same pattern as Yogle and ridd-le (and listed on the [jacob.gg hub](https://biccyanzac-pixel.github.io/jacob.gg/)): GitHub Pages serves the `gh-pages` branch (a mirror of `site/`), and the leaderboard is a Cloudflare Worker + D1 database.
 ```
 git push origin main
 git subtree split --prefix site -b gh-pages && git push -f origin gh-pages
+cd worker && npm run db:migrate     # only for a schema change: run the migration BEFORE deploying code that needs it
 cd worker && npx wrangler deploy     # redeploy whenever site/data/*.json or site/js/{daily,rules,scoring,names,geo}.js change
 ```
 
 ## Layout
 - `site/`: the static website
-  - `js/geo.js` (through-Earth directions, WGS84), `js/wmm.js` (World Magnetic Model declination), `js/orientation.js` (device orientation to pointing direction), `js/sensors.js` (live sensor stream), `js/scoring.js`, `js/daily.js` (dates, seeding), `js/rules.js` (daily target rules, practice exclusions), `js/radar.js`, `js/globe.js`, `js/mapview.js`, `js/ar.js`, `js/app.js` (UI)
-  - `data/targets.json`, `data/schedule.json` (820 days from 2026-10-09), `data/towns.json`, `data/land-*.json`
+  - `js/geo.js` (through-Earth directions, WGS84), `js/wmm.js` (World Magnetic Model declination), `js/orientation.js` (device orientation to pointing direction), `js/sensors.js` (live sensor stream), `js/scoring.js`, `js/daily.js` (dates, seeding), `js/rules.js` (daily target rules, practice exclusions), `js/radar.js`, `js/globe.js`, `js/mapview.js`, `js/compass.js`, `js/ar.js`, `js/app.js` (UI, laid out like ridd-le)
+  - `data/targets.json`, `data/schedule.json` (820 days from 2026-10-09, 3 places + reserve + fixed spot per day), `data/towns.json`, `data/land-*.json`
   - `sensors.html`: device test page
 - `worker/`: leaderboard API (Cloudflare Worker + D1)
 - `tools/`: data builders, schedule generator, local server
