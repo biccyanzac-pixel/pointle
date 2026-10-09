@@ -1,0 +1,323 @@
+{
+ "_note": "Famous places the Wikidata class queries miss (natural features time out; some famous sites sit in classes not queried). kind: nature | landmark. Coordinates are the summit/falls/site centre. fame is a rough sitelink-equivalent used for tiers.",
+ "places": [
+  {
+   "id": "everest",
+   "name": "Mount Everest",
+   "cc": "NP",
+   "lat": 27.9881,
+   "lon": 86.925,
+   "fame": 200,
+   "kind": "nature"
+  },
+  {
+   "id": "kilimanjaro",
+   "name": "Mount Kilimanjaro",
+   "cc": "TZ",
+   "lat": -3.0674,
+   "lon": 37.3556,
+   "fame": 140,
+   "kind": "nature"
+  },
+  {
+   "id": "fuji",
+   "name": "Mount Fuji",
+   "cc": "JP",
+   "lat": 35.3606,
+   "lon": 138.7274,
+   "fame": 140,
+   "kind": "nature"
+  },
+  {
+   "id": "uluru",
+   "name": "Uluru",
+   "cc": "AU",
+   "lat": -25.3444,
+   "lon": 131.0369,
+   "fame": 100,
+   "kind": "nature"
+  },
+  {
+   "id": "niagara",
+   "name": "Niagara Falls",
+   "cc": "CA",
+   "lat": 43.0828,
+   "lon": -79.0742,
+   "fame": 110,
+   "kind": "nature"
+  },
+  {
+   "id": "iguazu",
+   "name": "Iguazu Falls",
+   "cc": "AR",
+   "lat": -25.6953,
+   "lon": -54.4367,
+   "fame": 90,
+   "kind": "nature"
+  },
+  {
+   "id": "angel-falls",
+   "name": "Angel Falls",
+   "cc": "VE",
+   "lat": 5.9701,
+   "lon": -62.5362,
+   "fame": 80,
+   "kind": "nature"
+  },
+  {
+   "id": "matterhorn",
+   "name": "Matterhorn",
+   "cc": "CH",
+   "lat": 45.9763,
+   "lon": 7.6586,
+   "fame": 90,
+   "kind": "nature"
+  },
+  {
+   "id": "mont-blanc",
+   "name": "Mont Blanc",
+   "cc": "FR",
+   "lat": 45.8326,
+   "lon": 6.8652,
+   "fame": 100,
+   "kind": "nature"
+  },
+  {
+   "id": "denali",
+   "name": "Denali",
+   "cc": "US",
+   "lat": 63.0692,
+   "lon": -151.007,
+   "fame": 80,
+   "kind": "nature"
+  },
+  {
+   "id": "aconcagua",
+   "name": "Aconcagua",
+   "cc": "AR",
+   "lat": -32.6532,
+   "lon": -70.0109,
+   "fame": 85,
+   "kind": "nature"
+  },
+  {
+   "id": "vesuvius",
+   "name": "Mount Vesuvius",
+   "cc": "IT",
+   "lat": 40.821,
+   "lon": 14.426,
+   "fame": 90,
+   "kind": "nature"
+  },
+  {
+   "id": "table-mountain",
+   "name": "Table Mountain",
+   "cc": "ZA",
+   "lat": -33.9628,
+   "lon": 18.4098,
+   "fame": 70,
+   "kind": "nature"
+  },
+  {
+   "id": "rushmore",
+   "name": "Mount Rushmore",
+   "cc": "US",
+   "lat": 43.8791,
+   "lon": -103.4591,
+   "fame": 85,
+   "kind": "nature"
+  },
+  {
+   "id": "kilauea",
+   "name": "Kīlauea",
+   "cc": "US",
+   "lat": 19.4069,
+   "lon": -155.2834,
+   "fame": 70,
+   "kind": "nature"
+  },
+  {
+   "id": "dead-sea",
+   "name": "the Dead Sea",
+   "cc": "JO",
+   "lat": 31.559,
+   "lon": 35.4732,
+   "fame": 120,
+   "kind": "nature"
+  },
+  {
+   "id": "ha-long-bay",
+   "name": "Hạ Long Bay",
+   "cc": "VN",
+   "lat": 20.9101,
+   "lon": 107.1839,
+   "fame": 75,
+   "kind": "nature"
+  },
+  {
+   "id": "bora-bora",
+   "name": "Bora Bora",
+   "cc": "PF",
+   "lat": -16.5004,
+   "lon": -151.7415,
+   "fame": 65,
+   "kind": "nature"
+  },
+  {
+   "id": "krakatoa",
+   "name": "Krakatoa",
+   "cc": "ID",
+   "lat": -6.1021,
+   "lon": 105.423,
+   "fame": 70,
+   "kind": "nature"
+  },
+  {
+   "id": "kailash",
+   "name": "Mount Kailash",
+   "cc": "CN",
+   "lat": 31.0675,
+   "lon": 81.3119,
+   "fame": 60,
+   "kind": "nature"
+  },
+  {
+   "id": "easter-island",
+   "name": "Easter Island",
+   "cc": "CL",
+   "lat": -27.1127,
+   "lon": -109.3497,
+   "fame": 110,
+   "kind": "nature"
+  },
+  {
+   "id": "south-pole",
+   "name": "the South Pole",
+   "cc": "AQ",
+   "lat": -90.0,
+   "lon": 0.0,
+   "fame": 120,
+   "kind": "nature"
+  },
+  {
+   "id": "north-pole",
+   "name": "the North Pole",
+   "cc": "",
+   "cont": "AR",
+   "lat": 90.0,
+   "lon": 0.0,
+   "fame": 120,
+   "kind": "nature"
+  },
+  {
+   "id": "point-nemo",
+   "name": "Point Nemo (ocean pole of inaccessibility)",
+   "cc": "",
+   "cont": "OC",
+   "lat": -48.8767,
+   "lon": -123.3933,
+   "fame": 50,
+   "kind": "nature"
+  },
+  {
+   "id": "challenger-deep",
+   "name": "the Challenger Deep",
+   "cc": "",
+   "cont": "OC",
+   "lat": 11.3733,
+   "lon": 142.5917,
+   "fame": 60,
+   "kind": "nature"
+  },
+  {
+   "id": "machu-picchu",
+   "name": "Machu Picchu",
+   "cc": "PE",
+   "lat": -13.1631,
+   "lon": -72.545,
+   "fame": 180,
+   "kind": "landmark"
+  },
+  {
+   "id": "giza",
+   "name": "the Pyramids of Giza",
+   "cc": "EG",
+   "lat": 29.9792,
+   "lon": 31.1342,
+   "fame": 200,
+   "kind": "landmark"
+  },
+  {
+   "id": "hagia-sophia",
+   "name": "Hagia Sophia",
+   "cc": "TR",
+   "lat": 41.0086,
+   "lon": 28.9802,
+   "fame": 150,
+   "kind": "landmark"
+  },
+  {
+   "id": "kremlin",
+   "name": "the Moscow Kremlin",
+   "cc": "RU",
+   "lat": 55.752,
+   "lon": 37.6175,
+   "fame": 140,
+   "kind": "landmark"
+  },
+  {
+   "id": "brandenburg-gate",
+   "name": "the Brandenburg Gate",
+   "cc": "DE",
+   "lat": 52.5163,
+   "lon": 13.3777,
+   "fame": 120,
+   "kind": "landmark"
+  },
+  {
+   "id": "louvre",
+   "name": "the Louvre",
+   "cc": "FR",
+   "lat": 48.8606,
+   "lon": 2.3376,
+   "fame": 160,
+   "kind": "landmark"
+  },
+  {
+   "id": "mont-saint-michel",
+   "name": "Mont-Saint-Michel",
+   "cc": "FR",
+   "lat": 48.6361,
+   "lon": -1.5115,
+   "fame": 100,
+   "kind": "landmark"
+  },
+  {
+   "id": "edinburgh-castle",
+   "name": "Edinburgh Castle",
+   "cc": "GB",
+   "lat": 55.9486,
+   "lon": -3.1999,
+   "fame": 80,
+   "kind": "landmark"
+  },
+  {
+   "id": "great-wall-badaling",
+   "name": "the Great Wall of China (Badaling)",
+   "cc": "CN",
+   "lat": 40.3597,
+   "lon": 116.02,
+   "fame": 180,
+   "kind": "landmark"
+  },
+  {
+   "id": "arc-de-triomphe",
+   "name": "the Arc de Triomphe",
+   "cc": "FR",
+   "lat": 48.8738,
+   "lon": 2.295,
+   "fame": 110,
+   "kind": "landmark"
+  }
+ ]
+}

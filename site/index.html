@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pointle</title>
+<meta name="description" content="A daily game: point straight through the Earth at five places.">
+<meta name="theme-color" content="#0d1321">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <button class="brand" data-go="home" aria-label="Pointle home"><span class="logo" aria-hidden="true">◎</span> Pointle</button>
+  <nav>
+    <button class="link" data-go="board">Leaderboard</button>
+    <button class="link" data-go="help">How to play</button>
+  </nav>
+</header>
+
+<main>
+<!-- HOME -->
+<section id="home" class="screen">
+  <div id="friend-banner" class="banner" hidden></div>
+  <h1>Point through the Earth</h1>
+  <p class="lead">Five places a day. Point at each one in a dead-straight line <em>through</em> the planet, so far-away places are below your feet.</p>
+  <p class="meta"><span id="puzzle-no"></span> · <span id="theme"></span> · next puzzle in <span id="countdown">--:--:--</span></p>
+  <div id="home-done" class="card" hidden></div>
+  <div class="choices" id="home-choices">
+    <button class="big" id="go-sensor" hidden><span class="ico">📱</span><span><b>Point your phone</b><small>Use your phone's compass and tilt</small></span></button>
+    <button class="big" id="go-map"><span class="ico">🗺️</span><span><b>Play on the map</b><small>Turn a 3D arrow with your mouse or finger</small></span></button>
+    <div id="qr-box" class="card qr" hidden>
+      <div id="qr"></div>
+      <div><b>Scan to play on your phone</b><small>Point the phone itself: the most fun way to play.</small></div>
+    </div>
+  </div>
+  <p class="row"><button class="ghost" id="go-practice">Practice</button></p>
+</section>
+
+<!-- LOCATION -->
+<section id="loc" class="screen" hidden>
+  <h2>Where are you pointing from?</h2>
+  <div class="privacy"><span aria-hidden="true">🔒</span> <span class="privacy-text"></span></div>
+  <div class="choices">
+    <button class="big" id="loc-gps"><span class="ico">📍</span><span><b>Use my location</b><small>City-level accuracy is plenty</small></span></button>
+    <div class="card">
+      <label for="town-q"><b>Or pick your town</b></label>
+      <input id="town-q" type="search" autocomplete="off" placeholder="Start typing a town or city">
+      <ul id="town-results" class="results"></ul>
+    </div>
+    <button class="big" id="loc-fixed"><span class="ico">🏛️</span><span><b>Use today's fixed spot: <span class="fixed-name"></span></b><small>Everyone points from the same place (separate leaderboard)</small></span></button>
+  </div>
+  <p id="loc-msg" class="msg" role="status"></p>
+</section>
+
+<!-- SENSOR SETUP -->
+<section id="setup" class="screen" hidden>
+  <h2>Set up your compass</h2>
+  <fieldset class="methods">
+    <legend>How will you point?</legend>
+    <label class="method"><input type="radio" name="method" value="camera" checked>
+      <span><b>📷 Back camera</b><small>Aim the camera at the place, like a torch</small></span></label>
+    <label class="method"><input type="radio" name="method" value="top">
+      <span><b>⬆️ Top edge</b><small>Aim the top edge of the phone at the place</small></span></label>
+  </fieldset>
+  <button class="primary" id="enable-compass">Enable compass</button>
+  <div id="calib" hidden>
+    <div class="fig8" aria-hidden="true"><span>📱</span></div>
+    <p>Wave your phone in a figure-8 a few times to calibrate the compass.</p>
+    <p id="flat-hint" class="warn" hidden>Now hold the phone <b>flat, screen up,</b> for a moment so it can find north.</p>
+    <p id="acc-hint" class="msg"></p>
+    <p id="decl-line" class="small"></p>
+    <div id="fixed-decl" class="small" hidden>Your compass points to magnetic north. To correct it where you are, optionally
+      <button class="link" id="decl-pick">pick your town</button> (it stays on this device).
+      <div id="decl-search" hidden><input id="decl-q" type="search" placeholder="Your town"><ul id="decl-results" class="results"></ul></div></div>
+    <div class="live-read"><span id="setup-heading">—</span><span id="setup-tilt">—</span></div>
+    <button class="primary" id="start-sensor" disabled>Start</button>
+  </div>
+  <p id="setup-msg" class="msg" role="status"></p>
+</section>
+
+<!-- PLAY -->
+<section id="play" class="screen" hidden>
+  <p class="progress"><span id="play-progress"></span></p>
+  <h2 class="target">Point at <span id="target-name"></span></h2>
+  <p class="target-country" id="target-country"></p>
+  <div id="sensor-read" class="readout" hidden>
+    <div class="dial">
+      <div class="dial-label">Heading</div>
+      <div class="dial-value" id="read-heading">—</div>
+      <div class="dial-sub" id="read-cardinal"></div>
+    </div>
+    <div class="dial">
+      <div class="dial-label">Tilt</div>
+      <div class="dial-value" id="read-tilt">—</div>
+      <div class="dial-sub" id="read-tilt-sub"></div>
+    </div>
+    <p id="read-warn" class="warn" hidden></p>
+  </div>
+  <div id="map-wrap" class="map-wrap" hidden>
+    <div class="map-hud"><span id="map-heading">0°</span> · <span id="map-tilt">0°</span></div>
+    <div class="compass-badge" aria-hidden="true">N<br>↑</div>
+    <div class="tilt-ctl">
+      <label for="tilt">Tilt</label>
+      <input id="tilt" type="range" min="-90" max="90" step="0.5" value="-20" orient="vertical" aria-label="Tilt up or down">
+    </div>
+    <p class="map-tip">Drag the map to turn the arrow. Use the slider to tilt it up or down. Arrow keys work too.</p>
+    <p class="attrib" id="imagery-attrib"></p>
+  </div>
+  <button class="primary lock" id="lock">Lock in</button>
+</section>
+
+<!-- REVEAL -->
+<section id="reveal" class="screen" hidden>
+  <p class="progress" id="rev-progress"></p>
+  <h2><span id="rev-name"></span>: <span id="rev-score" class="score"></span></h2>
+  <p class="rev-detail"><b id="rev-error"></b> off · <span id="rev-miss"></span></p>
+  <div class="rev-viz">
+    <canvas id="radar" class="radar" aria-label="Map centred on you, with the target on the edge in its true direction"></canvas>
+    <canvas id="bar" class="bar" aria-label="Up and down: the target's true angle below the horizon"></canvas>
+  </div>
+  <p class="small legend"><span class="dot good"></span> true direction <span class="dot ink"></span> your guess <span class="dot bad"></span> <span id="live-legend">where you're pointing now</span></p>
+  <p class="small" id="sweep-tip"></p>
+  <div class="card facts" id="facts"></div>
+  <canvas id="globe" class="globe" aria-label="Globe showing the straight line through the Earth"></canvas>
+  <div class="row">
+    <button class="ghost" id="ar-btn" hidden>AR view</button>
+    <button class="primary" id="next">Next</button>
+  </div>
+</section>
+
+<!-- AR -->
+<section id="ar" class="screen ar" hidden>
+  <video playsinline muted></video>
+  <canvas></canvas>
+  <div class="ar-bar"><span id="ar-label"></span><button class="primary" id="ar-close">Close</button></div>
+</section>
+
+<!-- DONE -->
+<section id="done" class="screen" hidden>
+  <h2>Today's score: <span id="done-total" class="score"></span></h2>
+  <ul id="done-list" class="done-list"></ul>
+  <div class="row">
+    <button class="primary" id="share">Share result</button>
+    <button class="ghost" id="share-img">Share globe picture</button>
+  </div>
+  <p class="small warn" id="share-img-note" hidden>The globe picture shows roughly where you're pointing from. Only share it with people you're happy to tell that.</p>
+  <pre id="share-preview" class="share-preview"></pre>
+  <div class="card" id="submit-card">
+    <h3>Leaderboard</h3>
+    <form id="submit-form">
+      <label>Nickname <input id="nick" maxlength="20" required autocomplete="nickname"></label>
+      <label>Town to show (optional) <input id="town" maxlength="40" placeholder="Leave blank to show none"></label>
+      <p class="small">Only the town name you type here is saved, nothing else about where you are.</p>
+      <button class="primary" type="submit">Submit score</button>
+    </form>
+    <p id="submit-msg" class="msg" role="status"></p>
+  </div>
+  <div class="row"><button class="ghost" data-go="board">See leaderboards</button><button class="ghost" id="done-practice">Practice (all targets unlocked)</button></div>
+</section>
+
+<!-- LEADERBOARD -->
+<section id="board" class="screen" hidden>
+  <h2>Leaderboards</h2>
+  <div class="tabs" id="board-modes" role="tablist"></div>
+  <div class="tabs small-tabs" id="board-period" role="tablist">
+    <button data-period="day" class="on">Today</button><button data-period="week">This week</button>
+  </div>
+  <label class="small">Board: <select id="board-group"><option value="">Everyone</option></select></label>
+  <ol id="board-list" class="board"></ol>
+  <p id="board-msg" class="msg" role="status"></p>
+  <details class="card">
+    <summary>Friend groups</summary>
+    <form id="group-create" class="inline"><input id="group-name" maxlength="30" placeholder="Group name" required><button class="ghost">Create</button></form>
+    <form id="group-join" class="inline"><input id="group-code" maxlength="8" placeholder="Code, e.g. K7Q2XM" required><button class="ghost">Join</button></form>
+    <p id="group-msg" class="msg" role="status"></p>
+  </details>
+  <p class="small">Leaderboards are on your honour. The server checks the basics (scores add up, sensible timings, the right day's targets) but can't see how you pointed.</p>
+  <div class="privacy small"><span aria-hidden="true">🔒</span> <span class="privacy-text"></span></div>
+</section>
+
+<!-- PRACTICE -->
+<section id="practice" class="screen" hidden>
+  <h2>Practice</h2>
+  <p id="prac-mode" class="small"></p>
+  <div class="row">
+    <label class="small">Target <select id="prac-pick"></select></label>
+    <button class="ghost" id="prac-new">New target</button>
+  </div>
+  <h3 class="target">Point at <span id="prac-name"></span></h3>
+  <canvas id="prac-globe" class="globe big-globe" aria-label="Practice globe"></canvas>
+  <div id="prac-sliders" class="sliders">
+    <label>Heading <input id="prac-az" type="range" min="0" max="360" step="0.5" value="90"><span id="prac-az-v"></span></label>
+    <label>Tilt <input id="prac-el" type="range" min="-90" max="90" step="0.5" value="-20"><span id="prac-el-v"></span></label>
+  </div>
+  <p id="prac-read" class="small"></p>
+  <div class="row"><button class="primary" id="prac-check">Check</button></div>
+  <p id="prac-result" class="msg" role="status"></p>
+</section>
+
+<!-- HELP -->
+<section id="help" class="screen" hidden>
+  <h2>How to play</h2>
+  <ol class="help">
+    <li>Each day there are five places, the same for everyone (the day changes at 00:00 UTC).</li>
+    <li>Point at each one in a <b>straight line through the Earth</b>. Nearby places are just below the horizon; the other side of the world is nearly straight down.</li>
+    <li>Your score per place is out of 100: full marks within 5°, falling to zero at 90° off. 500 is perfect.</li>
+    <li>After each guess, the radar shows the true direction (the map is centred on you, with every place in its true compass direction) and the bar shows how far down it is. Sweep around to find it.</li>
+  </ol>
+  <h3>Modes</h3>
+  <ul class="help">
+    <li><b>Point your phone</b> uses the compass and tilt sensors. Choose to aim the back camera or the top edge.</li>
+    <li><b>Map</b> lets you turn a 3D arrow on a satellite view. Works on a computer too.</li>
+    <li><b>Fixed spot</b>: don't want to share your location with the game? Everyone points from the same city, which changes daily.</li>
+  </ul>
+  <p>Each mode has its own leaderboard. Weekdays get harder: Monday is famous capitals, Saturday smaller cities and landmarks, Sunday a mix.</p>
+  <div class="privacy"><span aria-hidden="true">🔒</span> <span class="privacy-text"></span></div>
+  <h3>Credits</h3>
+  <p class="small">Places: <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a> (CC BY 4.0) and <a href="https://www.wikidata.org/" target="_blank" rel="noopener">Wikidata</a> (CC0). Coastlines: <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> (public domain). Magnetic declination: World Magnetic Model 2025 (NOAA/BGS, public domain). Map imagery: EOxCloudless by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024), CC BY-NC-SA 4.0. 3D: three.js (MIT).</p>
+</section>
+</main>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

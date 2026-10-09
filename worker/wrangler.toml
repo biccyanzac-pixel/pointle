@@ -1,0 +1,12 @@
+name = "pointle-leaderboard"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pointle-leaderboard"
+database_id = "59271571-329b-46b8-8b98-6eec63e07bdb"
+
+# Browser origins allowed to call this API (comma-separated).
+[vars]
+ALLOWED_ORIGINS = "https://biccyanzac-pixel.github.io"

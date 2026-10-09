@@ -1,0 +1,19 @@
+{
+  "name": "pointle",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\"",
+    "build:data": "node tools/build_targets.mjs",
+    "schedule": "node tools/make_schedule.mjs",
+    "e2e": "node test-e2e/privacy.e2e.mjs"
+  },
+  "devDependencies": {
+    "geographiclib-geodesic": "^2.2.0",
+    "playwright-core": "^1.64.0",
+    "qrcode-generator": "^2.0.4",
+    "three": "^0.180.0",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  }
+}

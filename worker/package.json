@@ -1,0 +1,19 @@
+{
+  "name": "pointle-leaderboard-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:local": "wrangler dev --local --port 8799 --var ALLOWED_ORIGINS:http://localhost:8080",
+    "db:init:local": "wrangler d1 execute pointle-leaderboard --local --file=schema.sql",
+    "db:init": "wrangler d1 execute pointle-leaderboard --remote --file=schema.sql",
+    "test": "node test/e2e.mjs http://127.0.0.1:8799",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "workerd@1.20261006.1": true
+  }
+}

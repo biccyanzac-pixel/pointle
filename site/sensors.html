@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pointle sensor test</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  td { padding: 5px 6px; border-bottom: 1px solid var(--line); }
+  td:first-child { color: var(--ink-2); width: 48%; }
+  .big-num { font-size: 2.2rem; font-weight: 800; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sensor test</h1>
+  <p class="small">For checking the compass and tilt maths on real phones. Nothing on this page is sent anywhere: "Copy report" only copies text to your clipboard. Your location is only used on the device, to work out the magnetic declination.</p>
+  <div class="row">
+    <button class="primary" id="go">Enable compass</button>
+    <button class="ghost" id="loc">Use my location (for declination)</button>
+  </div>
+  <fieldset class="methods">
+    <label class="method"><input type="radio" name="m" value="camera" checked><span><b>Back camera</b></span></label>
+    <label class="method"><input type="radio" name="m" value="top"><span><b>Top edge</b></span></label>
+  </fieldset>
+  <div class="readout">
+    <div class="dial"><div class="dial-label">True heading</div><div class="big-num" id="h">—</div></div>
+    <div class="dial"><div class="dial-label">Tilt</div><div class="big-num" id="t">—</div></div>
+  </div>
+  <table id="tbl"></table>
+  <div class="row"><button class="ghost" id="copy">Copy report</button><span id="copied" class="small"></span></div>
+  <h3>Checks to try</h3>
+  <ol class="small">
+    <li>Camera method, phone upright: aim at something whose compass bearing you know (a street on a map, the sun's azimuth). Heading should match within about 5-10°.</li>
+    <li>Tilt: phone upright and level → 0°; aim the camera at your feet → about 90° below.</li>
+    <li>Top-edge method, phone flat: heading should match a compass app. Rotate the screen to landscape: the heading should follow the new top edge.</li>
+    <li>iPhone: hold the phone flat once after enabling (it learns north), then raise it upright; the heading should stay steady and correct.</li>
+  </ol>
+  <p><a href="./">Back to Pointle</a></p>
+</main>
+<script type="module">
+import { SensorPointer } from './js/sensors.js';
+import { requestPosition } from './js/location.js';
+const sp = new SensorPointer({ method: 'camera' });
+let started = false, posNote = 'not set (declination 0)';
+const $ = (s) => document.querySelector(s);
+const f = (x, d = 1) => (x == null || Number.isNaN(x) ? '—' : Number(x).toFixed(d));
+let rate = 0, count = 0, lastT = performance.now();
+document.querySelectorAll('input[name=m]').forEach((r) => r.addEventListener('change', () => { sp.method = r.value; }));
+$('#go').addEventListener('click', async () => {
+  if (started) return;
+  const ok = await sp.requestPermission();
+  if (!ok) { alert('Permission denied'); return; }
+  sp.start(); started = true; $('#go').textContent = 'Compass on';
+});
+$('#loc').addEventListener('click', async () => {
+  try { const p = await requestPosition(); sp.setOrigin(p.lat, p.lon); posNote = 'from device location'; } catch (e) { posNote = e.message; }
+});
+function rows() {
+  const l = sp.last || {};
+  const a = sp.azEl(150);
+  const other = sp.method === 'camera' ? 'top' : 'camera';
+  return [
+    ['User agent', navigator.userAgent],
+    ['Event kind', sp.kind],
+    ['Ready (has north)', String(sp.ready)],
+    ['iOS needs flat', String(sp.needsFlat)],
+    ['alpha / beta / gamma', `${f(l.alpha)} / ${f(l.beta)} / ${f(l.gamma)}`],
+    ['event.absolute', String(l.absolute)],
+    ['webkitCompassHeading', f(l.compassHeading)],
+    ['webkitCompassAccuracy', f(l.accuracy)],
+    ['iOS offset (learnt)', sp.kind === 'ios' ? f(sp.offset.value) : 'n/a'],
+    ['Flatness (1 = flat)', f(l.flat, 2)],
+    ['Screen angle', f(l.screenAngle, 0)],
+    ['Declination', `${f(sp.decl, 2)}° (${posNote})`],
+    ['Method', sp.method],
+    ['Heading / tilt', a ? `${f(a.az)}° / ${f(a.el)}°` : '—'],
+    ['Events per second', f(rate, 0)],
+  ];
+}
+sp.onChange(() => { count++; });
+setInterval(() => {
+  const now = performance.now(); rate = (count * 1000) / (now - lastT); count = 0; lastT = now;
+}, 1000);
+(function loop() {
+  const a = sp.azEl(150);
+  $('#h').textContent = a ? `${Math.round(a.az)}°` : '—';
+  $('#t').textContent = a ? `${a.el >= 0 ? '↑' : '↓'}${Math.abs(Math.round(a.el))}°` : '—';
+  $('#tbl').replaceChildren(...rows().map(([k, v]) => { const tr = document.createElement('tr'); tr.innerHTML = '<td></td><td></td>'; tr.children[0].textContent = k; tr.children[1].textContent = v; return tr; }));
+  requestAnimationFrame(loop);
+})();
+$('#copy').addEventListener('click', async () => {
+  const text = rows().map(([k, v]) => `${k}: ${v}`).join('\n');
+  try { await navigator.clipboard.writeText(text); $('#copied').textContent = 'Copied'; } catch { $('#copied').textContent = 'Could not copy'; }
+});
+</script>
+</body>
+</html>

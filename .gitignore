@@ -1,0 +1,5 @@
+node_modules/
+worker/node_modules/
+worker/.wrangler/
+test-e2e/shots/
+*.log
