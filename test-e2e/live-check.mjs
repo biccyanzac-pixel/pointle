@@ -18,7 +18,10 @@ page.on('requestfailed', (r) => errors.push(`failed: ${r.url()}`));
 try {
   await page.goto(SITE);
   await page.waitForSelector('#home:not([hidden])');
-  console.log('home:', (await page.textContent('#puzzle-no')), '·', await page.textContent('#theme'));
+  await page.waitForFunction(() => /Pointle #\d/.test(document.querySelector('#daynum').textContent));
+  console.log('home:', await page.textContent('#daynum'), '·', await page.textContent('#theme'));
+  await page.click('#archive-browse');
+  console.log('archive:', (await page.textContent('#archive-list')).slice(0, 80));
   await page.click('#go-map');
   await page.click('#loc-gps');
   await page.waitForSelector('#play:not([hidden]) .map-canvas');
@@ -28,13 +31,12 @@ try {
   await page.waitForSelector('#reveal:not([hidden])');
   await page.waitForTimeout(800);
   console.log('reveal:', (await page.textContent('#rev-score')), (await page.textContent('#rev-miss')));
-  await page.click('[data-go="board"]');
-  await page.waitForFunction(() => document.querySelector('#board-msg').textContent && !/Loading/.test(document.querySelector('#board-msg').textContent));
-  console.log('board:', await page.textContent('#board-msg'));
+  console.log('board visible:', await page.isVisible('#board'), '·', (await page.textContent('#board-empty')).trim() || (await page.textContent('#rows')).slice(0, 80));
 } finally {
-  await browser.close();
+  await Promise.race([browser.close(), new Promise((r) => setTimeout(r, 5000))]);
 }
 const leaks = reqs.filter((r) => /53\.80|1\.549|1\.55\b|53\.8\d/.test(decodeURIComponent(r)));
 assert.deepEqual(errors, [], 'page errors');
 assert.deepEqual(leaks, [], 'coordinates in requests');
 console.log(`ok - ${reqs.length} requests, hosts: ${[...new Set(reqs.map((r) => new URL(r.split(' ')[0]).host))].join(', ')}`);
+process.exit(0);
