@@ -91,6 +91,55 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 
 /* --- home --- */
 .choices { display: grid; gap: 0.6rem; margin-top: 1.25rem; }
+
+/* --- home: "Choose how to play" (one from each group) --- */
+.pick { margin-top: 1.4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); }
+.pick-title { margin: 0; font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
+.pick-step { display: flex; align-items: center; gap: 0.5rem; margin: 1.1rem 0 0.55rem; font-weight: 650; }
+.step-num {
+  display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 0.8rem; font-weight: 700;
+}
+.pick-need { margin-left: auto; font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.pick-step.done .pick-need { color: var(--good); }
+.pick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.pick-grid.three { grid-template-columns: repeat(3, 1fr); }
+.pick-card {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.2rem; text-align: center;
+  padding: 0.85rem 0.6rem 0.9rem; color: var(--text); background: var(--surface-2);
+  border: 2px solid var(--border); border-radius: 14px; transition: border-color 0.15s ease, background 0.15s ease;
+}
+.pick-card:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.pick-card[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.pick-card[aria-checked="true"]::after {
+  content: "✓"; position: absolute; top: 6px; right: 8px; width: 1.3rem; height: 1.3rem; border-radius: 50%;
+  display: grid; place-items: center; background: var(--accent); color: #fff; font-size: 0.75rem; font-weight: 700;
+}
+.pick-card:disabled { cursor: default; opacity: 0.9; }
+.pick-card b { font-size: 0.98rem; }
+.pick-card small { color: var(--muted); font-size: 0.8rem; line-height: 1.35; }
+.pick-card.small { padding: 0.7rem 0.4rem 0.75rem; }
+.pick-card.small b { font-size: 0.88rem; }
+.pick-ico { font-size: 1.6rem; line-height: 1.2; }
+.pick-art { width: 100%; max-width: 150px; height: auto; margin-bottom: 0.2rem; }
+.art-ground { fill: none; stroke: var(--muted); stroke-width: 2; }
+.art-globe { fill: var(--sea); stroke: var(--coast-globe); stroke-width: 2; }
+.art-land { fill: none; stroke: var(--coast); stroke-width: 3; stroke-linecap: round; }
+.art-target { fill: var(--you); }
+.art-ray { fill: none; stroke: var(--you); stroke-width: 2.5; stroke-dasharray: 3 4; stroke-linecap: round; }
+.art-phone { fill: var(--surface); stroke: var(--text); stroke-width: 2.5; }
+.art-dot { fill: var(--text); }
+.art-hand { stroke: var(--muted); stroke-width: 2; stroke-linecap: round; }
+.pick-card .qr { flex-direction: column; gap: 0.3rem; margin-top: 0.4rem; padding: 0; border: 0; }
+.pick-card .qr #qr { display: block; padding: 5px; }
+.pick-card .qr #qr svg { display: block; width: 84px; height: 84px; }
+#start-play { margin-top: 0.9rem; }
+.pick-privacy { margin-top: 0.7rem; font-size: 0.82rem; }
+@media (max-width: 400px) {
+  .pick-grid.three { grid-template-columns: 1fr; }
+  .pick-card.small { flex-direction: row; justify-content: flex-start; gap: 0.6rem; text-align: left; padding: 0.6rem 0.8rem; }
+  .pick-card.small b { min-width: 7.5em; }
+}
 .choice {
   display: flex; gap: 0.9rem; align-items: center; text-align: left; width: 100%;
   background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1rem;

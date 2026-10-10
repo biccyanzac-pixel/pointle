@@ -4,7 +4,7 @@
 // PRIVACY RULE FOR THIS FILE: the player's coordinates (S.origin) live only in memory. They are never
 // written to storage, put in a URL, logged, or passed to api.js. If you add a feature, keep it that way
 // (test-e2e/privacy.e2e.mjs checks every outgoing request).
-import { trueDirection, toAzEl, fromAzEl, compareDirections, tunnelFacts, angleBetween, exitPoint } from './geo.js';
+import { trueDirection, toAzEl, fromAzEl, compareDirections, tunnelFacts, angleBetween, exitPoint, centralAngle } from './geo.js';
 import { scoreFor, totalScore, describeMiss, shareText, encodeResult, decodeResult, emojiFor, MAX_TOTAL, TARGETS_PER_DAY as N } from './scoring.js';
 import { dayKey, puzzleNumber, weekday, msUntilNextUtcDay, entryFor, addDays, EPOCH } from './daily.js';
 import { generateDay, playableTargets, pickPracticeTarget, kmBetween, WEEKDAY_NAMES } from './rules.js';
@@ -121,8 +121,8 @@ function renderHome() {
   if (window.JGG) JGG.playingAs({ mount: $('#playing-as'), name: store.nick || JGG.name(), onChange: (n) => { store.nick = n; save(); } });
   $('#archive-banner').hidden = !S.archive;
   $('#archive-banner-day').textContent = `Pointle #${puzzleNumber(S.day)}, ${fmtDay(S.day)}`;
-  $('#go-sensor').hidden = !sensorsLikelyAvailable();
-  $('#qr-box').hidden = isPhone() || S.archive;
+  if (pick.from?.kind === 'fixed' && pick.from.day !== S.day) pick.from = null;   // the fixed spot changes daily
+  renderPick();
   if (!isPhone()) drawQr();
   const done = MODES.filter((m) => finished(playFor(m)));
   const box = $('#home-done');
@@ -222,6 +222,98 @@ function townSearch(input, list, onPick) {
   });
 }
 townSearch($('#town-q'), $('#town-results'), (t) => originChosen({ lat: t.lat, lon: t.lon }, `${t.name} (picked)`, false, `${t.name}, ${t.country} (picked)`));
+
+// ---------- home: choose how to play (one from each group) ----------
+// The chosen place lives only in memory (pick.from), like S.origin; only the mode is remembered.
+const pick = { mode: null, from: null };
+function renderPick() {
+  const phoneOk = sensorsLikelyAvailable();
+  $('#mode-phone').disabled = !phoneOk;
+  $('#mode-phone-note').textContent = phoneOk ? 'Hold it up and aim with its compass. The most fun way.'
+    : isPhone() ? 'This browser can\'t read the compass. Try Chrome or Safari.' : 'Needs a phone.';
+  $('#qr-box').hidden = phoneOk || isPhone() || S.archive;
+  if (!phoneOk && pick.mode === 'sensor') pick.mode = null;
+  if (!pick.mode) pick.mode = !phoneOk ? 'map' : ['sensor', 'map'].includes(store.lastMode) ? store.lastMode : null;
+  $('#mode-phone').setAttribute('aria-checked', String(pick.mode === 'sensor'));
+  $('#mode-map').setAttribute('aria-checked', String(pick.mode === 'map'));
+  for (const k of ['gps', 'town', 'fixed']) $(`#from-${k}`).setAttribute('aria-checked', String(pick.from?.kind === k));
+  $('.fixed-name').textContent = placeName(fixedOrigin());
+  const steps = $$('.pick-step');
+  [pick.mode, pick.from].forEach((v, i) => {
+    steps[i].classList.toggle('done', !!v);
+    steps[i].querySelector('.pick-need').textContent = v ? '✓ chosen' : 'pick one';
+  });
+  const b = $('#start-play');
+  b.disabled = !(pick.mode && pick.from);
+  b.textContent = !pick.mode ? 'Pick how you\'ll point (1)' : !pick.from ? 'Pick where you\'re pointing from (2)'
+    : `Start · ${pick.mode === 'sensor' ? 'phone' : 'map'} · ${pick.from.short}`;
+}
+function chooseMode(mode) { pick.mode = mode; renderPick(); }
+$('#mode-phone').addEventListener('click', () => chooseMode('sensor'));
+$('#mode-map').addEventListener('click', () => chooseMode('map'));
+$('#from-gps').addEventListener('click', async () => {
+  const btn = $('#from-gps'), note = $('#from-gps-note');
+  showError($('#from-msg'), null);
+  $('#from-town-search').hidden = true;
+  // Start the request straight away, inside the tap: some browsers only prompt from a user gesture.
+  const asking = requestPosition();
+  btn.disabled = true;
+  note.textContent = 'Asking… look for a prompt';
+  locationPermission().then((st) => { if (st === 'denied') note.textContent = 'Blocked by your browser'; });
+  const slow = setTimeout(() => { note.textContent = 'Still waiting…'; showError($('#from-msg'), 'No answer from your browser yet.', `If you didn't see a prompt, location is probably switched off for this browser. ${blockedHelp()}`); }, 8000);
+  try {
+    const p = await asking;
+    clearTimeout(slow);
+    showError($('#from-msg'), null);
+    const origin = { lat: p.lat, lon: p.lon };
+    // the nearest town, worked out here on the device
+    const town = nearestTown(origin).then((t) => (t ? `${t.name}, ${t.country}` : null)).catch(() => null);
+    pick.from = { kind: 'gps', origin, label: 'your location', fixed: false, town, short: 'my location' };
+    note.textContent = 'Got it';
+    town.then((t) => {
+      if (!t || pick.from?.origin !== origin) return;
+      note.textContent = `Near ${t.split(',')[0]}`;
+      pick.from.short = `near ${t.split(',')[0]}`;
+      renderPick();
+    });
+  } catch (err) {
+    clearTimeout(slow);
+    note.textContent = 'Your browser asks first';
+    showError($('#from-msg'), `${err.message} You can pick your town instead.`, err.help);
+    $('#from-town-search').hidden = false;
+    $('#from-town-q').focus({ preventScroll: true });
+  } finally {
+    btn.disabled = false;
+    renderPick();
+  }
+});
+$('#from-town').addEventListener('click', () => {
+  showError($('#from-msg'), null);
+  $('#from-town-search').hidden = false;
+  $('#from-town-q').focus();
+});
+townSearch($('#from-town-q'), $('#from-town-results'), (t) => {
+  pick.from = { kind: 'town', origin: { lat: t.lat, lon: t.lon }, label: `${t.name} (picked)`, fixed: false, town: `${t.name}, ${t.country} (picked)`, short: `from ${t.name}` };
+  $('#from-town-note').textContent = t.name;
+  $('#from-town-search').hidden = true;
+  $('#from-town-q').value = '';
+  $('#from-town-results').replaceChildren();
+  renderPick();
+});
+$('#from-fixed').addEventListener('click', () => {
+  const f = fixedOrigin();
+  showError($('#from-msg'), null);
+  $('#from-town-search').hidden = true;
+  pick.from = { kind: 'fixed', day: S.day, origin: { lat: f.lat, lon: f.lon }, label: `${f.n} (today's fixed spot)`, fixed: true, town: `Fixed spot: ${f.n}`, short: `fixed spot, ${f.n}` };
+  renderPick();
+});
+$('#start-play').addEventListener('click', () => {
+  if (!pick.mode || !pick.from) return;
+  store.lastMode = pick.mode; save();
+  S.input = pick.mode;
+  S.afterLocation = startMode(pick.mode);
+  originChosen(pick.from.origin, pick.from.label, pick.from.fixed, pick.from.town);
+});
 
 // ---------- compass instruments ----------
 function instrument(container) {
@@ -453,7 +545,7 @@ async function showReveal(i, guess, truth) {
   $('#live-legend').textContent = sensor ? 'where you’re pointing now' : 'drag the map and bar to explore';
   $('#sweep-tip').textContent = sensor
     ? 'Sweep your phone around: the map turns with you and the red arrow on the globe follows. Find the green dot and the green line on the bar.'
-    : 'Drag around the map to turn, drag the bar to tilt: the red arrow on the globe follows. Line up with the green marks.';
+    : 'Drag around the map to turn, drag the bar to tilt, or click a spot on the globe: the red arrow follows. Line up with the green marks.';
   if (sensor) {
     let buzzed = false;
     const off = S.sensor.onChange(() => {
@@ -477,7 +569,15 @@ async function showReveal(i, guess, truth) {
     const sweepEl = (e) => { radar.pointer.el = bar.elAt(e.clientY); bar.live = radar.pointer.el; setLive(fromAzEl(radar.pointer.az, radar.pointer.el)); draw(); };
     dragOn($('#radar'), sweepAz);
     dragOn($('#bar'), sweepEl);
-    leaveHooks.push(() => { dragOff($('#radar')); dragOff($('#bar')); });
+    // click a spot on the globe: the red arrow, map and bar all aim at it (dragging the globe still spins it)
+    S.globe.onPick = (ll) => {
+      if (centralAngle(S.origin, ll) < 0.5) return;   // your own spot: no direction
+      const dir = trueDirection(S.origin, ll);
+      const a = toAzEl(dir);
+      radar.pointer = { az: a.az, el: a.el }; bar.live = a.el;
+      setLive(dir); draw();
+    };
+    leaveHooks.push(() => { dragOff($('#radar')); dragOff($('#bar')); S.globe.onPick = null; });
     draw();
   }
   const onResize = () => { radar.resize(); bar.resize(); S.globe.resize(); globeDirty = true; draw(); };
@@ -844,8 +944,6 @@ $('#prac-check').addEventListener('click', () => {
 $('#go-practice').addEventListener('click', openPractice);
 
 // ---------- start ----------
-$('#go-sensor').addEventListener('click', () => chooseOrigin('sensor', startMode('sensor')));
-$('#go-map').addEventListener('click', () => chooseOrigin('map', startMode('map')));
 
 function friendBanner() {
   const code = new URLSearchParams(location.search).get('r');
@@ -866,7 +964,7 @@ async function main() {
   renderBoard();
   renderYesterday();
   const play = new URLSearchParams(location.search).get('play');
-  if (play === 'sensor' && sensorsLikelyAvailable()) chooseOrigin('sensor', startMode('sensor'));
+  if (play === 'sensor' && sensorsLikelyAvailable()) { chooseMode('sensor'); $('#from-gps').scrollIntoView({ block: 'center' }); }
 }
 main();
 

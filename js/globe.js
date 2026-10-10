@@ -220,21 +220,38 @@ export class Globe {
     this.setZoom(1 + (this.dist - 1) * f);
   }
 
-  /** Drag to spin; pinch (two fingers) or the mouse wheel to zoom. */
+  /** Latitude/longitude of the globe's surface under a screen point, or null if it misses the Earth. */
+  latLonAt(clientX, clientY) {
+    const r = this.canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, this.camera);
+    const hit = ray.ray.intersectSphere(new THREE.Sphere(new THREE.Vector3(), 1), new THREE.Vector3());
+    if (!hit) return null;
+    const p = this.world.worldToLocal(hit).normalize();   // back into spherePoint() coordinates
+    return { lat: Math.asin(p.y) / DEG, lon: Math.atan2(-p.z, p.x) / DEG };
+  }
+
+  /**
+   * Drag to spin; pinch (two fingers) or the mouse wheel to zoom.
+   * A click or tap that doesn't drag calls this.onPick({ lat, lon }) with the spot clicked, if set.
+   */
   installDrag() {
     const el = this.canvas;
     el.style.touchAction = 'none';
     const pts = new Map();
-    let pinch = null;
+    let pinch = null, press = null;   // press: where a single-pointer press started, until it becomes a drag
     const spread = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
     el.addEventListener('pointerdown', (e) => {
       el.setPointerCapture(e.pointerId);
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      press = pts.size === 1 ? { x: e.clientX, y: e.clientY } : null;
       if (pts.size === 2) pinch = { d: spread(), dist: this.dist };
     });
     el.addEventListener('pointermove', (e) => {
       const p = pts.get(e.pointerId);
       if (!p) return;
+      if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 5) press = null;
       const dx = e.clientX - p.x, dy = e.clientY - p.y;
       p.x = e.clientX; p.y = e.clientY;
       if (pts.size >= 2 && pinch) {
@@ -251,8 +268,15 @@ export class Globe {
       this.render();
     });
     const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
-    el.addEventListener('pointerup', up);
-    el.addEventListener('pointercancel', up);
+    el.addEventListener('pointerup', (e) => {
+      const click = press && pts.size === 1;
+      up(e);
+      press = null;
+      if (!click || !this.onPick) return;
+      const ll = this.latLonAt(e.clientX, e.clientY);
+      if (ll) this.onPick(ll);
+    });
+    el.addEventListener('pointercancel', (e) => { press = null; up(e); });
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
       this.zoomBy(Math.exp(e.deltaY * 0.0015));
