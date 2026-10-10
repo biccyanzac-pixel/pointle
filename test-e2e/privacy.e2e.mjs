@@ -117,7 +117,20 @@ async function playMap(page) {
     await page.click('#lock');
     await visible(page, '#reveal');
     await page.waitForTimeout(700);
-    if (i === 0) await shot(page, 'map-reveal');
+    if (i === 0) {
+      // globe zoom: starts fully out (zoom-out disabled), + zooms in, the wheel can't go past the default
+      const dist = () => page.evaluate(() => window.__pointle.S.globe.dist);
+      const d0 = await dist();
+      assert.ok(await page.isDisabled('#reveal .globe-zoom button[aria-label="Zoom out"]'), 'cannot zoom out past the default');
+      await page.click('#reveal .globe-zoom button[aria-label="Zoom in"]');
+      assert.ok((await dist()) < d0, 'zoom in works');
+      const g = await page.locator('#globe').boundingBox();
+      await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+      for (let k = 0; k < 10; k++) await page.mouse.wheel(0, 400);
+      assert.ok(Math.abs((await dist()) - d0) < 1e-6, 'wheel zoom-out stops at the default size');
+      await page.click('#reveal .globe-zoom button[aria-label="Zoom in"]');
+      await shot(page, 'map-reveal');
+    }
     const rb = await page.locator('#radar').boundingBox();
     await page.mouse.click(rb.x + rb.width * 0.8, rb.y + rb.height * 0.3);   // sweep: live arrow on the globe
     await page.click('#next');

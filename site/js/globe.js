@@ -5,6 +5,10 @@ import { DEG, enuToEcef, normalize } from './geo.js';
 
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+// Zoom limits, as camera distance from the Earth's centre (radius 1). The default view is the furthest out:
+// you can zoom in towards the surface but never shrink the world below its starting size.
+const FAR = 4.4, NEAR = 1.3;
+
 /** Unit-sphere position in three.js axes (y up = north pole). */
 export function spherePoint(lat, lon, r = 1) {
   const cl = Math.cos(lat * DEG);
@@ -33,7 +37,8 @@ export class Globe {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
-    this.camera.position.set(0, 0, 4.4);
+    this.dist = FAR;
+    this.camera.position.set(0, 0, FAR);
     this.world = new THREE.Group();
     this.scene.add(this.world);
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.9));
@@ -45,9 +50,11 @@ export class Globe {
     sea.renderOrder = 1;
     this.world.add(sea);
     // core layers, so the tunnel's depth reads at a glance
+    this.layers = [];
     for (const [r, c, o] of [[0.546, '--mantle', 0.25], [0.19, '--core', 0.6]]) {
       const m = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 24), new THREE.MeshBasicMaterial({ color: new THREE.Color(css(c)), transparent: true, opacity: o, depthWrite: false }));
       m.renderOrder = 0; this.world.add(m);
+      this.layers.push([m, o]);
     }
     const pos = [];
     for (const ring of rings) {
@@ -66,6 +73,7 @@ export class Globe {
     this.live = new THREE.Group();   // the arrow that follows the player after the guess
     this.world.add(this.live);
     this.installDrag();
+    this.addZoomButtons();
     this.resize();
     this.loop = this.loop.bind(this);
     this.running = false;
@@ -82,8 +90,11 @@ export class Globe {
     for (const c of [...this.marks.children]) { this.marks.remove(c); c.geometry?.dispose(); }
   }
 
+  /** Marker scale for the current zoom, so dots and lines keep about the same size on screen. */
+  get k() { return Math.max(0.2, ((this.dist - 1) / (FAR - 1)) ** 0.85); }
+
   dot(lat, lon, colour, size = 0.035) {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(size, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(colour), depthTest: false }));
+    const m = new THREE.Mesh(new THREE.SphereGeometry(size * this.k, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(colour), depthTest: false }));
     m.position.copy(spherePoint(lat, lon, 1.0));
     m.renderOrder = 5;
     this.marks.add(m);
@@ -101,7 +112,7 @@ export class Globe {
     this.marks.add(l);
     // a thin tube too: WebGL ignores linewidth on most devices
     if (width > 1) {
-      const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.LineCurve3(a, b), 1, 0.008 * width, 6),
+      const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.LineCurve3(a, b), 1, 0.008 * width * this.k, 6),
         new THREE.MeshBasicMaterial({ color: new THREE.Color(colour), depthTest: false }));
       tube.renderOrder = 4;
       this.marks.add(tube);
@@ -114,7 +125,9 @@ export class Globe {
    * opts.stub: draw the guess as a short arrow only (practice before playing: never shows where it exits).
    * opts.hideTarget: don't draw the target or the true line.
    */
-  show({ origin, target, guessEnu = null, stub = false, hideTarget = false, face = true, guessColour = '--bad' }) {
+  show(opts) {
+    const { origin, target, guessEnu = null, stub = false, hideTarget = false, face = true, guessColour = '--bad' } = opts;
+    this.lastShow = { ...opts, face: false };
     this.clearMarks();
     this.origin = origin;
     const p = spherePoint(origin.lat, origin.lon);
@@ -129,13 +142,14 @@ export class Globe {
       const t = stub ? 0.35 : exitDistance(p, d) ?? 0.4;
       const end = p.clone().addScaledVector(d, t);
       this.line(p, end, css(guessColour), 2.5);
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.08, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(css(guessColour)), depthTest: false }));
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.03 * this.k, 0.08 * this.k, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(css(guessColour)), depthTest: false }));
       cone.position.copy(end);
       cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d);
       cone.renderOrder = 6;
       this.marks.add(cone);
       this.guessEnd = end;
     }
+    if (face) this.setZoom(FAR);
     if (face) this.faceTowards(target && !hideTarget ? [p, spherePoint(target.lat, target.lon)] : [p]);
     this.render();
   }
@@ -145,6 +159,7 @@ export class Globe {
    * Doesn't move the camera, so the player can keep spinning the globe while it updates.
    */
   setLive(enu, colour = '--bad') {
+    this.lastLive = [enu, colour];
     for (const c of [...this.live.children]) { this.live.remove(c); c.geometry?.dispose(); }
     if (!enu || !this.origin) { this.render(); return; }
     const p = spherePoint(this.origin.lat, this.origin.lon);
@@ -152,8 +167,8 @@ export class Globe {
     const t = exitDistance(p, d) ?? 0.4;
     const end = p.clone().addScaledVector(d, t);
     const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(css(colour)), depthTest: false });
-    const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.LineCurve3(p, end), 1, 0.014, 8), mat);
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.11, 14), mat);
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.LineCurve3(p, end), 1, 0.014 * this.k, 8), mat);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.04 * this.k, 0.11 * this.k, 14), mat);
     cone.position.copy(end);
     cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d);
     for (const m of [tube, cone]) { m.renderOrder = 7; this.live.add(m); }
@@ -179,24 +194,96 @@ export class Globe {
     this.world.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), roll));
   }
 
+  /** Zoom to a camera distance (clamped between the default view and close to the surface). */
+  setZoom(dist) {
+    const before = this.dist;
+    this.dist = Math.min(FAR, Math.max(NEAR, dist));
+    this.camera.position.set(0, 0, this.dist);
+    // the see-through core and mantle help at a glance but muddy a close-up: fade them as you zoom in
+    for (const [m, o] of this.layers ?? []) m.material.opacity = o * Math.min(1, ((this.dist - 1) / (FAR - 1)) * 1.6) ** 1.5;
+    // rebuild the markers at the new scale (cheap: a handful of meshes)
+    if (Math.abs(before - this.dist) > 1e-9 && this.lastShow && !this.rebuilding) {
+      this.rebuilding = true;
+      this.show(this.lastShow);
+      if (this.lastLive) this.setLive(...this.lastLive);
+      this.rebuilding = false;
+    }
+    this.render();
+    if (this.zoomOut) {
+      this.zoomOut.disabled = this.dist >= FAR - 1e-6;
+      this.zoomIn.disabled = this.dist <= NEAR + 1e-6;
+    }
+  }
+
+  /** Zoom by a factor of the distance to the surface (so steps feel even near the ground). */
+  zoomBy(f) {
+    this.setZoom(1 + (this.dist - 1) * f);
+  }
+
+  /** Drag to spin; pinch (two fingers) or the mouse wheel to zoom. */
   installDrag() {
-    let last = null;
     const el = this.canvas;
     el.style.touchAction = 'none';
-    el.addEventListener('pointerdown', (e) => { last = [e.clientX, e.clientY]; el.setPointerCapture(e.pointerId); });
+    const pts = new Map();
+    let pinch = null;
+    const spread = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+    el.addEventListener('pointerdown', (e) => {
+      el.setPointerCapture(e.pointerId);
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) pinch = { d: spread(), dist: this.dist };
+    });
     el.addEventListener('pointermove', (e) => {
-      if (!last) return;
-      const dx = e.clientX - last[0], dy = e.clientY - last[1];
-      last = [e.clientX, e.clientY];
+      const p = pts.get(e.pointerId);
+      if (!p) return;
+      const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      p.x = e.clientX; p.y = e.clientY;
+      if (pts.size >= 2 && pinch) {
+        const d = spread();
+        if (d > 0) this.setZoom(1 + (pinch.dist - 1) * (pinch.d / d));
+        return;
+      }
+      // spin slower when zoomed in, so the surface under your finger moves about as fast as your finger
+      const k = 0.01 * ((this.dist - 1) / (FAR - 1)) ** 0.8;
       const q = new THREE.Quaternion()
-        .setFromAxisAngle(new THREE.Vector3(0, 1, 0), dx * 0.01)
-        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), dy * 0.01));
+        .setFromAxisAngle(new THREE.Vector3(0, 1, 0), dx * k)
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), dy * k));
       this.world.quaternion.premultiply(q);
       this.render();
     });
-    const up = () => { last = null; };
+    const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
+    el.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      this.zoomBy(Math.exp(e.deltaY * 0.0015));
+    }, { passive: false });
+  }
+
+  /** Semi-transparent + / − buttons in the corner (shown on phones too). */
+  addZoomButtons() {
+    const c = this.canvas;
+    let wrap = c.parentElement;
+    if (!wrap.classList.contains('globe-wrap')) {
+      wrap = document.createElement('div');
+      wrap.className = 'globe-wrap';
+      c.replaceWith(wrap);
+      wrap.append(c);
+    }
+    const box = document.createElement('div');
+    box.className = 'globe-zoom';
+    const btn = (label, aria, f) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.setAttribute('aria-label', aria);
+      b.addEventListener('click', () => this.zoomBy(f));
+      box.append(b);
+      return b;
+    };
+    this.zoomIn = btn('+', 'Zoom in', 0.6);
+    this.zoomOut = btn('−', 'Zoom out', 1 / 0.6);
+    wrap.append(box);
+    this.setZoom(this.dist);
   }
 
   render() { this.renderer.render(this.scene, this.camera); }

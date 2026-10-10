@@ -1,5 +1,10 @@
 # Pointle: build status (2026-10-09)
 
+## Update 4
+- **Globe zoom** (reveal and practice): mouse wheel, pinch, and semi-transparent +/− buttons in the corner (phones too). You can't zoom out past the default size. Markers and lines keep their on-screen size, the core/mantle layers fade as you zoom in, and spinning slows down near the surface.
+- Tilt-slider labels ("up", "level", "down") have their own column with a backing, so the handle can't cover them.
+- **Safari location:** a page can't force the prompt; Safari decides. If other sites still prompt, Safari has a saved per-site "Deny" for this one. The page now times the refusal. If it's instant (no prompt possible), it says so and points first to the "aA" menu → Website Settings → Location, then the system settings.
+
 ## Update 3 (owner feedback, 2026-10-09 evening)
 - **Privacy note changed (owner's request).** The leaderboard no longer asks for a town. It shows where you played from automatically: the nearest town (pop. 15,000+) to your location, found on the device from the built-in list ("Leeds, UK"); or the town you picked ("Leeds, UK (picked)"); or "Fixed spot: Volgograd". It's still never coordinates, and the fixed spot shows nothing about you. The in-game note, README and schema comment were updated to say exactly this. A "hide my town" option could be added if players want one.
 - **Places always say where they are**: the guess heading reads "Point at East London, South Africa". US, Canadian and Australian cities include the state or province ("Columbia, South Carolina, USA"). `targets.json` gained an `r` (region) field; ids, order and the schedule are unchanged (checked byte-for-byte).
