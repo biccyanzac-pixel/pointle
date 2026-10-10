@@ -88,6 +88,7 @@ button { font: inherit; cursor: pointer; }
 .countdown { font-variant-numeric: tabular-nums; }
 .challenge-label { margin-bottom: 0.35rem; }
 .prompt { margin: 0; font-size: clamp(1.5rem, 5vw, 2rem); line-height: 1.2; font-weight: 650; letter-spacing: -0.02em; text-wrap: balance; }
+.target-where { color: var(--accent); }
 .small-prompt { font-size: clamp(1.25rem, 4.4vw, 1.6rem); }
 .riddle-note { margin: 0.5rem 0 0; font-size: 0.92rem; color: var(--muted); }
 .attempts-note { margin: 0.4rem 0 0; font-size: 0.82rem; font-weight: 600; color: var(--accent); }
@@ -220,10 +221,17 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 .map-compass .cmp-label.north { fill: #ff7a7a; }
 .map-compass .cmp-tick.major { stroke: #fff; }
 .map-readout { position: absolute; top: 108px; left: 50%; transform: translateX(-50%); background: rgb(0 0 0 / 0.6); color: #fff; padding: 2px 10px; border-radius: 999px; font-size: 0.85rem; font-weight: 650; font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap; }
-.tilt-ctl { position: absolute; right: 8px; top: 56px; bottom: 60px; display: flex; flex-direction: column; align-items: center; background: rgb(0 0 0 / 0.55); color: #fff; border-radius: 999px; padding: 8px 4px; width: 50px; }
-.tilt-ctl label { font-size: 0.72rem; margin: 0 0 4px; }
-.tilt-ctl input { writing-mode: vertical-lr; direction: rtl; flex: 1; width: 34px; accent-color: #ff7a7a; }
-.map-tip { position: absolute; bottom: 22px; left: 8px; right: 64px; margin: 0; font-size: 0.78rem; background: rgb(0 0 0 / 0.6); color: #fff; padding: 5px 9px; border-radius: 8px; pointer-events: none; }
+.tilt-ctl { position: absolute; right: 8px; top: 56px; bottom: 60px; display: flex; flex-direction: column; align-items: center; background: rgb(0 0 0 / 0.6); color: #fff; border-radius: 14px; padding: 8px 6px; width: 74px; }
+.tilt-ctl label { font-size: 0.72rem; margin: 0 0 4px; font-weight: 650; }
+/* the track: sky above level, earth below, with the horizon marked, like the phone's tilt gauge */
+.tilt-track { position: relative; flex: 1 1 0; min-height: 0; width: 100%; }
+.tilt-strip { position: absolute; left: 8px; top: 10px; bottom: 10px; width: 10px; border-radius: 5px; background: linear-gradient(to bottom, var(--sky), var(--sky-2) 50%, var(--earth) 50%, #5b3a25); }
+.tilt-level { position: absolute; left: 2px; right: 2px; top: 50%; height: 0; border-top: 2px solid #fff; }
+.tilt-level span { position: absolute; right: 0; top: -1.15em; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.02em; }
+.tilt-tag { position: absolute; right: 2px; font-size: 0.6rem; opacity: 0.8; }
+.tilt-tag.up { top: 0; } .tilt-tag.down { bottom: 0; }
+.tilt-ctl input { position: absolute; top: 0; bottom: 0; left: 20px; height: 100%; width: 28px; margin: 0; writing-mode: vertical-lr; direction: rtl; accent-color: #ff7a7a; }
+.map-tip { position: absolute; bottom: 22px; left: 8px; right: 90px; margin: 0; font-size: 0.78rem; background: rgb(0 0 0 / 0.6); color: #fff; padding: 5px 9px; border-radius: 8px; pointer-events: none; }
 .attrib { position: absolute; bottom: 0; left: 0; right: 0; margin: 0; font-size: 0.6rem; background: rgb(0 0 0 / 0.7); padding: 2px 6px; color: #ddd; }
 .attrib a { color: #cde; }
 .heading-ctl { display: grid; grid-template-columns: auto 1fr; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
