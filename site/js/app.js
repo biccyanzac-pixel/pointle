@@ -116,6 +116,7 @@ function showError(node, message, help) {
 function renderHome() {
   $('#daynum').textContent = `Pointle #${puzzleNumber(S.day)}`;
   $('#theme').textContent = WEEKDAY_NAMES[weekday(S.day)];
+  $('#level').replaceChildren(window.JGG ? JGG.levelChip(S.day) : 'Today\'s places');
   $('#archive-banner').hidden = !S.archive;
   $('#archive-banner-day').textContent = `Pointle #${puzzleNumber(S.day)}, ${fmtDay(S.day)}`;
   $('#go-sensor').hidden = !sensorsLikelyAvailable();
@@ -530,6 +531,7 @@ $('#ar-close').addEventListener('click', () => {
 // ---------- done ----------
 function siteUrl() { const u = new URL(location.href); u.search = ''; u.hash = ''; return u.toString(); }
 
+const autoSubmitted = new Set(); // day:slot keys auto-submitted this visit (never retried automatically)
 function showDone(mode) {
   const p = playFor(mode);
   show('done');
@@ -565,6 +567,11 @@ function showDone(mode) {
   $('#done-practice').onclick = () => openPractice();
   boardMode = mode;
   renderBoard();
+  window.JGG?.rate({ game: 'pointle', day: S.day, mount: $('#rate') });
+  // House rule: once you've given a name, finished games go on the leaderboard by themselves.
+  // First-timers (no name yet) and failed submits keep the form.
+  const key = `${S.day}:${slot(mode)}`;
+  if (!p.submitted && store.nick && !autoSubmitted.has(key)) { autoSubmitted.add(key); submitScore(mode); }
 }
 
 async function shareImage(total) {

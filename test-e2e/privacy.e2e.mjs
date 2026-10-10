@@ -2,7 +2,8 @@
 //
 //   node tools/serve.mjs 8080            (site)
 //   cd worker && npm run dev:local       (leaderboard on :8799, after npm run db:init:local)
-//   node test-e2e/privacy.e2e.mjs [siteUrl] [apiUrl]
+//   cd ../jacob.gg/worker && npm run dev:local   (hub on :8831, ratings)
+//   node test-e2e/privacy.e2e.mjs [siteUrl] [apiUrl] [hubUrl]
 //
 // Plays a full map-mode game (including grabbing and dragging the 3D arrow) and a full sensor-mode game
 // (synthetic orientation events on an emulated phone) with a mocked GPS position, submits both to the
@@ -17,6 +18,7 @@ import assert from 'node:assert/strict';
 
 const SITE = process.argv[2] || 'http://localhost:8080/';
 const API = process.argv[3] || 'http://127.0.0.1:8799';
+const HUB = process.argv[4] || 'http://127.0.0.1:8831';   // jacob.gg hub worker (ratings), run from the jacob.gg repo
 const POS = { latitude: 53.80076, longitude: -1.54908 };   // Leeds, as a mock GPS fix
 const N = 3;
 const shotDir = fileURLToPath(new URL('./shots/', import.meta.url));
@@ -59,6 +61,11 @@ function checkPrivacy() {
       if (!/^\/api\/(session|submit|board|group\/(create|join))$/.test(u.pathname)) problems.push(`unexpected API path ${u.pathname}`);
       continue;
     }
+    if (u.host === new URL(HUB).host) {                       // jacob.gg hub: ratings only
+      if (!/^\/api\/(rate|rating)$/.test(u.pathname)) problems.push(`unexpected hub path ${u.pathname}`);
+      continue;
+    }
+    if (u.host === 'biccyanzac-pixel.github.io' && /^\/jacob\.gg\/kit\/jgg\.(js|css)$/.test(u.pathname)) continue;   // shared kit
     if (u.host === 'tiles.maps.eox.at') {                     // documented map imagery
       const m = u.pathname.match(/\/g\/(\d+)\/(\d+)\/(\d+)\.jpg$/);
       if (!m) problems.push(`unexpected imagery URL ${r.url}`);
@@ -143,6 +150,13 @@ async function playMap(page) {
   await boardShows(page, 'E2E map');
   const board = await page.textContent('#rows');
   assert.match(board, /Leeds/);
+  // jacob.gg rating box: choose stars and send (keyboard: the page is still scrolling to the board)
+  await page.waitForSelector('#rate .jgg-rate');
+  await page.focus('#rate .jgg-stars');
+  await page.keyboard.press('End');
+  await page.keyboard.press('ArrowLeft');
+  await page.click('#rate .jgg-rate-send');
+  await page.waitForFunction(() => document.querySelector('#rate .jgg-rate-note').textContent.startsWith('Thanks'));
   await shot(page, 'map-done');
 }
 
@@ -182,8 +196,7 @@ async function playSensor(page) {
     await page.click('#next');
   }
   await visible(page, '#done');
-  await page.fill('#nick', 'E2E phone');
-  await page.click('#submit-btn');
+  // the name was given before (seeded below), so the score goes on the board without a click
   await visible(page, '#submitted-note');
   await boardShows(page, 'E2E phone');
   await shot(page, 'sensor-done');
@@ -227,13 +240,14 @@ try {
   const p1 = await desk.newPage();
   record(p1, 'desktop');
   p1.on('pageerror', (e) => pageErrors.push(`desktop: ${e.message}`));
-  await p1.goto(`${SITE}?api=${encodeURIComponent(API)}`);
+  await p1.goto(`${SITE}?api=${encodeURIComponent(API)}&hub=${encodeURIComponent(HUB)}`);
   await visible(p1, '#home');
   await p1.waitForFunction(() => /Pointle #\d/.test(document.querySelector('#daynum').textContent));
   assert.ok(await p1.isVisible('#qr-box'), 'desktop shows the QR code');
   assert.ok(!(await p1.isVisible('#go-sensor')), 'desktop hides sensor mode');
   assert.ok(await p1.isVisible('#board'), 'leaderboard is always visible');
   assert.ok(await p1.isVisible('#archive'), 'archive card is visible');
+  assert.match(await p1.textContent('#level'), /·|Sunday special/, 'house weekday level from the jacob.gg kit');
   await p1.click('#archive-browse');
   assert.match(await p1.textContent('#archive-list'), /starts tomorrow|Pointle #/);
   await shot(p1, 'home-desktop');
@@ -243,10 +257,11 @@ try {
 
   // phone: sensor mode with synthetic orientation events
   const phone = await browser.newContext({ geolocation: POS, permissions: ['geolocation', 'accelerometer', 'gyroscope', 'magnetometer'], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  await phone.addInitScript(() => { if (!localStorage.getItem('pointle:v2')) localStorage.setItem('pointle:v2', JSON.stringify({ nick: 'E2E phone' })); });
   const p2 = await phone.newPage();
   record(p2, 'phone');
   p2.on('pageerror', (e) => pageErrors.push(`phone: ${e.message}`));
-  await p2.goto(`${SITE}?api=${encodeURIComponent(API)}`);
+  await p2.goto(`${SITE}?api=${encodeURIComponent(API)}&hub=${encodeURIComponent(HUB)}`);
   await visible(p2, '#home');
   assert.ok(await p2.isVisible('#go-sensor'), 'phone shows sensor mode');
   await shot(p2, 'home-phone');
@@ -257,7 +272,7 @@ try {
   const denied = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const p3 = await denied.newPage();
   record(p3, 'denied');
-  await p3.goto(`${SITE}?api=${encodeURIComponent(API)}`);
+  await p3.goto(`${SITE}?api=${encodeURIComponent(API)}&hub=${encodeURIComponent(HUB)}`);
   await visible(p3, '#home');
   await p3.click('#go-map');
   await p3.click('#loc-gps');
