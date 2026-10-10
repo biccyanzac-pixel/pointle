@@ -97,8 +97,11 @@ async function boardShows(page, text) {
 }
 
 async function playMap(page) {
-  await page.click('#go-map');
-  await page.click('#loc-gps');
+  await page.click('#mode-map');
+  await page.click('#from-gps');
+  await page.waitForSelector('#start-play:not([disabled])');
+  assert.match(await page.textContent('#start-play'), /Start · map · (my location|near )/, 'the Start button says what was chosen');
+  await page.click('#start-play');
   for (let i = 0; i < N; i++) {
     await page.waitForSelector('#play:not([hidden]) .map-canvas');
     await page.waitForTimeout(300);
@@ -136,6 +139,15 @@ async function playMap(page) {
       for (let k = 0; k < 10; k++) await page.mouse.wheel(0, 400);
       assert.ok(Math.abs((await dist()) - d0) < 1e-6, 'wheel zoom-out stops at the default size');
       await page.click('#reveal .globe-zoom button[aria-label="Zoom in"]');
+      // click a spot on the globe: the red arrow aims there; dragging the globe only spins it
+      const live = () => page.evaluate(() => JSON.stringify(window.__pointle.S.globe.lastLive?.[0] ?? null));
+      const before = await live();
+      await page.mouse.click(g.x + g.width * 0.6, g.y + g.height * 0.45);
+      const aimed = await live();
+      assert.notEqual(aimed, before, 'clicking the globe moves the red arrow');
+      await page.mouse.move(g.x + g.width * 0.5, g.y + g.height * 0.5);
+      await page.mouse.down(); await page.mouse.move(g.x + g.width * 0.7, g.y + g.height * 0.6, { steps: 5 }); await page.mouse.up();
+      assert.equal(await live(), aimed, 'dragging the globe spins it without moving the arrow');
       await shot(page, 'map-reveal');
     }
     const rb = await page.locator('#radar').boundingBox();
@@ -170,8 +182,10 @@ async function playSensor(page) {
       window.dispatchEvent(e);
     }, 40);
   });
-  await page.click('#go-sensor');
-  await page.click('#loc-gps');
+  await page.click('#mode-phone');
+  await page.click('#from-gps');
+  await page.waitForSelector('#start-play:not([disabled])');
+  await page.click('#start-play');
   await visible(page, '#setup');
   await page.click('#enable-compass');
   await page.waitForSelector('#start-sensor:not([disabled])');
@@ -244,7 +258,9 @@ try {
   await visible(p1, '#home');
   await p1.waitForFunction(() => /Pointle #\d/.test(document.querySelector('#daynum').textContent));
   assert.ok(await p1.isVisible('#qr-box'), 'desktop shows the QR code');
-  assert.ok(!(await p1.isVisible('#go-sensor')), 'desktop hides sensor mode');
+  assert.ok(await p1.isDisabled('#mode-phone'), 'desktop cannot choose phone mode (the QR code is in its card)');
+  assert.ok(await p1.isDisabled('#start-play'), 'Start waits until both choices are made');
+  assert.equal(await p1.getAttribute('#mode-map', 'aria-checked'), 'true', 'map is preselected on desktop');
   assert.ok(await p1.isVisible('#board'), 'leaderboard is always visible');
   assert.ok(await p1.isVisible('#archive'), 'archive card is visible');
   assert.match(await p1.textContent('#level'), /·|Sunday special/, 'house weekday level from the jacob.gg kit');
@@ -263,7 +279,7 @@ try {
   p2.on('pageerror', (e) => pageErrors.push(`phone: ${e.message}`));
   await p2.goto(`${SITE}?api=${encodeURIComponent(API)}&hub=${encodeURIComponent(HUB)}`);
   await visible(p2, '#home');
-  assert.ok(await p2.isVisible('#go-sensor'), 'phone shows sensor mode');
+  assert.ok(await p2.isEnabled('#mode-phone'), 'phone can choose phone mode');
   await shot(p2, 'home-phone');
   await playSensor(p2);
   console.log('ok - phone sensor game (compass dial, live globe arrow), practice unlocked');
@@ -274,10 +290,14 @@ try {
   record(p3, 'denied');
   await p3.goto(`${SITE}?api=${encodeURIComponent(API)}&hub=${encodeURIComponent(HUB)}`);
   await visible(p3, '#home');
-  await p3.click('#go-map');
-  await p3.click('#loc-gps');
-  await visible(p3, '#loc-msg');
-  assert.match(await p3.textContent('#loc-msg'), /declined|blocked|location/i);
+  await p3.click('#mode-map');
+  await p3.click('#from-gps');
+  await visible(p3, '#from-msg');
+  assert.match(await p3.textContent('#from-msg'), /declined|blocked|location/i);
+  assert.ok(await p3.isVisible('#from-town-q'), 'a denied location opens the town search');
+  await p3.fill('#from-town-q', 'Leeds');
+  await p3.click('#from-town-results li:first-child button');
+  assert.match(await p3.textContent('#start-play'), /Start · map · from Leeds/);
   await shot(p3, 'location-denied');
   console.log('ok - denied location shows help');
 

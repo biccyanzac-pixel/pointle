@@ -37,14 +37,58 @@
       <p class="hint" id="playing-as" hidden></p>
       <p class="friend-note" id="friend-banner" hidden></p>
       <div class="played" id="home-done" hidden></div>
-      <div class="choices">
-        <button type="button" class="choice" id="go-sensor" hidden><span class="ico">📱</span><span><b>Point your phone</b><small>Use your phone's compass and tilt</small></span></button>
-        <button type="button" class="choice" id="go-map"><span class="ico">🗺️</span><span><b>Play on the map</b><small>Drag a 3D arrow with your mouse or finger</small></span></button>
-        <div class="qr" id="qr-box" hidden>
-          <div id="qr"></div>
-          <div><b>Or scan to play on your phone</b><small>Point the phone itself: the most fun way to play.</small></div>
+      <section class="pick" aria-labelledby="pick-title">
+        <h2 class="pick-title" id="pick-title">Choose how to play</h2>
+        <p class="pick-step"><span class="step-num">1</span> How will you point? <span class="pick-need">pick one</span></p>
+        <div class="pick-grid" role="radiogroup" aria-label="How will you point?">
+          <button type="button" class="pick-card" id="mode-phone" role="radio" aria-checked="false">
+          <svg class="pick-art" viewBox="0 0 120 64" aria-hidden="true">
+            <path d="M8 46 Q60 70 112 46" class="art-ground"/>
+            <circle cx="96" cy="58" r="5" class="art-target"/>
+            <path d="M44 30 L92 55" class="art-ray"/>
+            <rect x="30" y="8" width="20" height="34" rx="4" transform="rotate(-28 40 25)" class="art-phone"/>
+            <circle cx="36" cy="12" r="1.6" transform="rotate(-28 40 25)" class="art-dot"/>
+          </svg>
+            <b>Point your phone</b>
+            <small id="mode-phone-note">Hold it up and aim with its compass. The most fun way.</small>
+            <span class="qr" id="qr-box" hidden><span id="qr"></span><small>Scan with your phone to play this way</small></span>
+          </button>
+          <button type="button" class="pick-card" id="mode-map" role="radio" aria-checked="false">
+          <svg class="pick-art" viewBox="0 0 120 64" aria-hidden="true">
+            <circle cx="60" cy="32" r="26" class="art-globe"/>
+            <path d="M42 20 c8 -4 14 2 20 -1 s12 -4 16 2 M44 40 c6 -2 10 2 12 7 M70 38 c6 -2 10 3 8 8" class="art-land"/>
+            <circle cx="48" cy="16" r="3.5" class="art-target"/>
+            <path d="M48 16 L74 50" class="art-ray"/>
+            <path d="M74 50 l-7 -2 m7 2 l1 -7" class="art-ray"/>
+            <path d="M88 12 l6 6 m-6 0 l6 -6" class="art-hand"/>
+          </svg>
+            <b>Drag on a map</b>
+            <small>Aim a 3D arrow on a globe with your mouse or finger.</small>
+          </button>
         </div>
-      </div>
+
+        <p class="pick-step"><span class="step-num">2</span> Where are you pointing from? <span class="pick-need">pick one</span></p>
+        <div class="pick-grid three" role="radiogroup" aria-label="Where are you pointing from?">
+          <button type="button" class="pick-card small" id="from-gps" role="radio" aria-checked="false">
+            <span class="pick-ico" aria-hidden="true">📍</span><b>My location</b><small id="from-gps-note">Your browser asks first</small>
+          </button>
+          <button type="button" class="pick-card small" id="from-town" role="radio" aria-checked="false">
+            <span class="pick-ico" aria-hidden="true">🔎</span><b>Pick a town</b><small id="from-town-note">Type where you are</small>
+          </button>
+          <button type="button" class="pick-card small" id="from-fixed" role="radio" aria-checked="false">
+            <span class="pick-ico" aria-hidden="true">🏛️</span><b>Today's fixed spot</b><small><span class="fixed-name"></span> · own board</small>
+          </button>
+        </div>
+        <div class="field" id="from-town-search" hidden>
+          <label class="label" for="from-town-q">Your town or city</label>
+          <input id="from-town-q" type="text" autocomplete="off" placeholder="Start typing a town or city">
+          <ul id="from-town-results" class="results"></ul>
+        </div>
+        <p class="error" id="from-msg" role="alert" hidden></p>
+        <p class="hint pick-privacy">🔒 Your location never leaves your device. The leaderboard shows only a town name.</p>
+
+        <button type="button" class="submit" id="start-play" disabled>Pick how you'll point (1)</button>
+      </section>
       <button type="button" class="ghost-button" id="go-practice">Practice first</button>
     </div>
 
