@@ -124,7 +124,7 @@ async function playMap(page) {
   }
   await visible(page, '#done');
   await page.fill('#nick', 'E2E map');
-  await page.fill('#town', 'Leeds');
+  assert.match(await page.textContent('#town-line'), /Leeds/, 'the nearest town (found on the device) is what the board will show');
   await page.click('#submit-btn');
   await visible(page, '#submitted-note');
   await boardShows(page, 'E2E map');
@@ -156,6 +156,9 @@ async function playSensor(page) {
     await sleep(2100);
     assert.match(await page.textContent('#read-heading'), /\d+°|straight/);
     assert.ok(await page.isVisible('#play-instrument svg.compass'), 'compass dial on screen');
+    const heading = await page.textContent('#play h2');
+    const where = await page.evaluate(() => { const { S } = window.__pointle; const t = S.byId.get(S.game.ids[S.game.idx]); return t.c; });
+    if (where) assert.ok(heading.includes(where), `heading "${heading}" names the country ${where}`);
     if (i === 0) await shot(page, 'sensor-play', false);
     await page.click('#lock');
     await visible(page, '#reveal');
@@ -188,6 +191,10 @@ async function practiceBeforePlaying(page) {
   await visible(page, '#practice');
   const opts = await page.$$eval('#prac-pick option', (o) => o.map((x) => x.value));
   assert.deepEqual(opts, ['random'], 'before playing, practice offers random places only');
+  await page.waitForSelector('#practice .map-canvas');
+  assert.ok(await page.isVisible('#practice #heading'), 'practice uses the same arrow, compass and sliders as guessing');
+  await page.locator('#heading').fill('123');
+  assert.match(await page.textContent('#prac-read'), /^123°/);
   const today = await page.evaluate(() => { const { S } = window.__pointle; return [...S.entry.targets, S.entry.reserve].map((id) => S.byId.get(id).n); });
   for (let k = 0; k < 10; k++) {
     const name = await page.textContent('#prac-name');

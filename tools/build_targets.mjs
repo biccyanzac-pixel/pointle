@@ -55,6 +55,7 @@ function cityName(c) {
 const MIN_CITY_LINKS = 45;
 const targets = [];
 const famous = cities.filter((c) => c.sl >= MIN_CITY_LINKS).sort((a, b) => b.sl - a.sl);
+const REGION_COUNTRIES = new Set(['US', 'CA', 'AU']);
 const CITY_SKIP = new Set(['Fuji', 'The Bronx', 'Brooklyn', 'Queens', 'Manhattan', 'Staten Island']); // boroughs, not cities
 const CITY_RENAME = { 'Heroica Puebla de Zaragoza': 'Puebla', 'Acapulco de Juárez': 'Acapulco', 'Toluca de Lerdo': 'Toluca',
   Cirta: 'Constantine' };
@@ -65,6 +66,8 @@ for (const c of famous) {
   if (targets.some((t) => (t.n === name || km(t, c) < 15))) continue;
   targets.push({
     id: `c${c.gid}`, n: name, cc: c.cc, c: countryName(c.cc), ct: countries[c.cc]?.cont ?? '', k: 'city',
+    // state/province where town names repeat a lot (Columbia, Hamilton, Perth...)
+    ...(REGION_COUNTRIES.has(c.cc) && admin1[`${c.cc}.${c.a1}`] ? { r: admin1[`${c.cc}.${c.a1}`] } : {}),
     // fame: sitelinks, damped for small towns (bots write articles about every town in some languages)
     lat: r4(c.lat), lon: r4(c.lon), f: Math.round(c.sl * Math.min(1, (c.pop / 1e6) ** 0.25) + (c.code === 'PPLC' ? 40 : 0)),
     cap: c.code === 'PPLC' ? 1 : 0, pop: c.pop,

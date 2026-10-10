@@ -9,13 +9,13 @@ import { scoreFor, totalScore, describeMiss, shareText, encodeResult, decodeResu
 import { dayKey, puzzleNumber, weekday, msUntilNextUtcDay, entryFor, addDays, EPOCH } from './daily.js';
 import { generateDay, playableTargets, pickPracticeTarget, kmBetween, WEEKDAY_NAMES } from './rules.js';
 import { SensorPointer, sensorsLikelyAvailable } from './sensors.js';
-import { requestPosition, searchTowns, nearestTown } from './location.js';
+import { requestPosition, searchTowns, nearestTown, locationPermission, blockedHelp } from './location.js';
 import { checkName, checkTown } from './names.js';
 import { Compass, TiltGauge, cardinal } from './compass.js';
 import * as api from './api.js';
 
 export const REPO_URL = 'https://github.com/biccyanzac-pixel/pointle';
-const PRIVACY = 'Your precise location never leaves your phone or computer — all the maths happens on your device. If you choose to show a town on the leaderboard, only that town name is saved. Check the open-source code: ';
+const PRIVACY = 'Your precise location never leaves your phone or computer — all the maths happens on your device. The leaderboard only shows the nearest town to where you played from (worked out on your device), the town you picked, or that you used the fixed spot. Check the open-source code: ';
 const MODE_LABEL = { sensor: 'Phone', map: 'Map', 'fixed-sensor': 'Fixed spot · phone', 'fixed-map': 'Fixed spot · map' };
 const MODES = ['sensor', 'map', 'fixed-sensor', 'fixed-map'];
 
@@ -58,6 +58,7 @@ const S = {
   fixed: false,
   origin: null,          // { lat, lon } in memory only
   originLabel: '',
+  originTown: null,      // what the leaderboard shows: nearest town name, picked town, or the fixed spot (never coordinates)
   sensor: null,
   method: store.method || 'camera',
   game: null,            // { mode, ids, idx, results, shownAt }
@@ -82,7 +83,10 @@ async function loadData() {
 }
 const entryForDay = (d) => entryFor(d, S.schedule, (x) => generateDay(x, S.targets));
 const T = (id) => S.byId.get(id);
-const placeName = (t) => (t.c && t.k !== 'nature' ? `${t.n}, ${t.c}` : t.n);
+/** "East London, South Africa", "Columbia, South Carolina, USA": names repeat, so always say where. */
+const placeWhere = (t) => [t.r, t.c].filter(Boolean).join(', ');
+const placeName = (t) => [t.n, placeWhere(t)].filter(Boolean).join(', ');
+const KIND = { city: 'City', landmark: 'Landmark', nature: 'Natural wonder' };
 const fixedOrigin = () => T(S.entry.origin);
 
 // ---------- screens (inside the game card) ----------
@@ -157,37 +161,52 @@ function tickCountdown() {
 function chooseOrigin(input, then, { allowFixed = true } = {}) {
   S.input = input;
   S.afterLocation = then;
-  $('.fixed-name').textContent = fixedOrigin().n;
+  $('.fixed-name').textContent = placeName(fixedOrigin());
   $('#loc-fixed').hidden = !allowFixed;
   showError($('#loc-msg'), null);
   $('#town-q').value = '';
   $('#town-results').replaceChildren();
   show('loc');
 }
-function originChosen(origin, label, fixed) {
+function originChosen(origin, label, fixed, town) {
   S.origin = origin;
   S.originLabel = label;
   S.fixed = fixed;
+  // GPS: the nearest town in the built-in list, worked out here on the device
+  S.originTown = town ?? nearestTown(origin).then((t) => (t ? `${t.name}, ${t.country}` : null)).catch(() => null);
   S.afterLocation?.();
+}
+function locationFailed(message, help) {
+  showError($('#loc-msg'), `${message} You can pick your town instead: start typing it below.`, help);
+  $('#loc-msg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('#town-q').focus({ preventScroll: true });
 }
 $('#loc-gps').addEventListener('click', async () => {
   const btn = $('#loc-gps');
-  btn.disabled = true;
-  btn.querySelector('small').textContent = 'Asking your phone or browser…';
+  const small = btn.querySelector('small');
   showError($('#loc-msg'), null);
+  // Start the request straight away, inside the tap: some browsers only prompt from a user gesture.
+  const asking = requestPosition();
+  btn.disabled = true;
+  small.textContent = 'Asking your browser… look for a prompt';
+  // If the browser already knows it's blocked there will be no prompt at all: say so now.
+  locationPermission().then((st) => { if (st === 'denied') small.textContent = 'Blocked by your browser settings'; });
+  const slow = setTimeout(() => { small.textContent = 'Still waiting… no prompt? See below'; showError($('#loc-msg'), 'No answer from your browser yet.', `If you didn't see a prompt, location is probably switched off for this browser. ${blockedHelp()}`); }, 8000);
   try {
-    const p = await requestPosition();
+    const p = await asking;
+    clearTimeout(slow);
     originChosen({ lat: p.lat, lon: p.lon }, 'your location', false);
   } catch (err) {
-    showError($('#loc-msg'), `${err.message} You can pick your town below instead.`, err.help);
+    clearTimeout(slow);
+    locationFailed(err.message, err.help);
   } finally {
     btn.disabled = false;
-    btn.querySelector('small').textContent = 'City-level accuracy is plenty';
+    small.textContent = 'City-level accuracy is plenty';
   }
 });
 $('#loc-fixed').addEventListener('click', () => {
   const f = fixedOrigin();
-  originChosen({ lat: f.lat, lon: f.lon }, `${f.n} (today's fixed spot)`, true);
+  originChosen({ lat: f.lat, lon: f.lon }, `${f.n} (today's fixed spot)`, true, `Fixed spot: ${f.n}`);
 });
 function townSearch(input, list, onPick) {
   let n = 0;
@@ -199,7 +218,7 @@ function townSearch(input, list, onPick) {
       t.name, el('small', {}, [t.region, t.country].filter(Boolean).join(', '))))));
   });
 }
-townSearch($('#town-q'), $('#town-results'), (t) => originChosen({ lat: t.lat, lon: t.lon }, `${t.name} (picked)`, false));
+townSearch($('#town-q'), $('#town-results'), (t) => originChosen({ lat: t.lat, lon: t.lon }, `${t.name} (picked)`, false, `${t.name}, ${t.country} (picked)`));
 
 // ---------- compass instruments ----------
 function instrument(container) {
@@ -291,23 +310,50 @@ function startGame() {
   store.days[S.day] ??= {};
   store.days[S.day][slot(mode)] = saved;
   save();
+  Promise.resolve(S.originTown).then((town) => { saved.town = town ? [...town].slice(0, 40).join('') : null; save(); });
   S.game = { mode, ids, results: saved.results, idx: saved.results.length };
   showTarget();
 }
 
-let mapView = null, mapCompass = null;
+let mapView = null, mapCompass = null, onMapMove = null;
+/** The map view for the current origin (created on first use). Lives inside #map-wrap. */
+async function ensureMap() {
+  if (mapView && mapView.origin === S.origin) return mapView;
+  mapView?.dispose();
+  const { MapView, IMAGERY } = await import('./mapview.js');
+  $('#imagery-attrib').innerHTML = IMAGERY.attribution;
+  $('#map-compass').replaceChildren();
+  mapCompass = new Compass($('#map-compass'), { size: 'small' });
+  mapView = new MapView($('#map-wrap'), S.origin, {
+    onChange: (az, elv) => {
+      mapCompass.set(az);
+      $('#map-readout').textContent = `${Math.round(az)}° ${cardinal(az)} · ${readTilt(elv)}`;
+      $('#tilt').value = elv;
+      $('#heading').value = az;
+      onMapMove?.(az, elv);
+    },
+  });
+  return mapView;
+}
+/** Put the map (and its heading slider) into a screen: the guess screen or practice. */
+function placeMap(container, before = null) {
+  container.insertBefore($('#map-wrap'), before);
+  container.insertBefore($('#heading-ctl'), before);
+  $('#map-wrap').hidden = false;
+  $('#heading-ctl').hidden = false;
+}
 async function showTarget() {
   const g = S.game;
   const t = T(g.ids[g.idx]);
   show('play');
   $('#play-progress').textContent = `${MODE_LABEL[g.mode]} · place ${g.idx + 1} of ${N} · from ${S.originLabel}`;
   $('#target-name').textContent = t.n;
-  $('#target-country').textContent = t.c || '';
+  $('#target-where').textContent = placeWhere(t) ? `, ${placeWhere(t)}` : '';
+  $('#target-country').textContent = KIND[t.k] ?? '';
   g.shownAt = Date.now();
   const sensor = S.input === 'sensor';
   $('#sensor-read').hidden = !sensor;
-  $('#map-wrap').hidden = sensor;
-  $('#heading-ctl').hidden = sensor;
+  if (sensor) { $('#map-wrap').hidden = true; $('#heading-ctl').hidden = true; }
   if (sensor) {
     const inst = instrument($('#play-instrument'));
     const off = S.sensor.onChange(() => {
@@ -324,21 +370,9 @@ async function showTarget() {
     });
     leaveHooks.push(off);
   } else {
-    if (!mapView || mapView.origin !== S.origin) {
-      mapView?.dispose();
-      const { MapView, IMAGERY } = await import('./mapview.js');
-      $('#imagery-attrib').innerHTML = IMAGERY.attribution;
-      $('#map-compass').replaceChildren();
-      mapCompass = new Compass($('#map-compass'), { size: 'small' });
-      mapView = new MapView($('#map-wrap'), S.origin, {
-        onChange: (az, elv) => {
-          mapCompass.set(az);
-          $('#map-readout').textContent = `${Math.round(az)}° ${cardinal(az)} · ${readTilt(elv)}`;
-          $('#tilt').value = elv;
-          $('#heading').value = az;
-        },
-      });
-    }
+    placeMap($('#play'), $('#lock'));
+    onMapMove = null;
+    await ensureMap();
     mapView.setDirection(Math.random() * 360, -20 + (Math.random() - 0.5) * 10); // no hint from the start pose
     requestAnimationFrame(() => mapView.resize());
   }
@@ -505,7 +539,7 @@ function showDone(mode) {
   $('#done-total').textContent = `${total}`;
   $('#done-total').className = `score ${scoreClass(total, MAX_TOTAL)}`;
   $('#done-list').replaceChildren(...p.results.map((r) => el('li', { class: 'attempt-row' },
-    el('span', {}, `${emojiFor(r.error)} ${T(r.id).n}`),
+    el('span', {}, `${emojiFor(r.error)} ${placeName(T(r.id))}`),
     el('span', { class: `attempt-score ${scoreClass(scoreFor(r.error), 100)}` }, `${fmtDeg(r.error)} · ${scoreFor(r.error)}`))));
   const link = `${siteUrl()}?r=${encodeResult({ day: S.day, mode, errors })}`;
   const text = shareText(puzzleNumber(S.day), p.results.map((r) => ({ name: T(r.id).n, error: r.error })), link, MODE_LABEL[mode]);
@@ -521,8 +555,8 @@ function showDone(mode) {
   $('#share-img-note').hidden = !canImg || mode.startsWith('fixed');
   $('#share-img').onclick = () => shareImage(total);
   $('#nick').value = store.nick || '';
-  $('#town').value = store.town ?? '';
-  if (!store.town && !mode.startsWith('fixed') && S.origin) nearestTown(S.origin).then((n) => { if (n && !$('#town').value) $('#town').placeholder = `e.g. ${n} (or leave blank)`; });
+  const town = p.town ?? (mode.startsWith('fixed') ? `Fixed spot: ${fixedOrigin().n}` : null);
+  $('#town-line').textContent = town ? `The leaderboard shows where you played from: ${town}.` : 'The leaderboard shows no town for this game.';
   $('#submit-form').hidden = !!p.submitted;
   $('#submitted-note').hidden = !p.submitted;
   $('#submitted-note').textContent = 'Submitted to the leaderboard ✓';
@@ -559,9 +593,12 @@ async function submitScore(mode) {
   const msg = $('#submit-msg');
   const n = checkName($('#nick').value);
   if (n.error) { showError(msg, n.error); return; }
-  const town = checkTown($('#town').value);
-  if (town.error) { showError(msg, town.error); return; }
-  store.nick = n.value; store.town = town.value ?? ''; save();
+  // a town name only: the nearest town, a picked town, or the fixed spot (a real place name the filter
+  // dislikes is just left off rather than blocking the score)
+  const raw = p.town ?? (mode.startsWith('fixed') ? `Fixed spot: ${fixedOrigin().n}` : null);
+  const town = checkTown(raw);
+  if (town.error) town.value = null;
+  store.nick = n.value; save();
   showError(msg, null);
   $('#submit-btn').disabled = true;
   try {
@@ -653,7 +690,7 @@ async function renderYesterday() {
   if (y < EPOCH) { card.hidden = true; return; }
   card.hidden = false;
   const e = entryForDay(y);
-  $('#yesterday-places').textContent = `Pointle #${puzzleNumber(y)}: ${e.targets.map((id) => T(id).n).join(' · ')} (fixed spot: ${T(e.origin).n})`;
+  $('#yesterday-places').textContent = `Pointle #${puzzleNumber(y)}: ${e.targets.map((id) => placeName(T(id))).join(' · ')} (fixed spot: ${placeName(T(e.origin))})`;
   const rows = $('#yesterday-rows');
   rows.replaceChildren();
   const boards = await Promise.all(MODES.map((m) => api.board({ mode: m, period: 'day', day: y }).catch(() => null)));
@@ -711,15 +748,13 @@ async function openPractice() {
   const pick = $('#prac-pick');
   const opts = [el('option', { value: 'random' }, 'Random place')];
   if (unlocked) {
-    today.targets.forEach((id, i) => opts.push(el('option', { value: id }, `Today #${i + 1}: ${T(id).n}`)));
+    today.targets.forEach((id, i) => opts.push(el('option', { value: id }, `Today #${i + 1}: ${placeName(T(id))}`)));
     opts.push(el('option', { value: 'free' }, 'Free explore: see where your arrow comes out'));
   }
   pick.replaceChildren(...opts);
   $('#prac-mode').textContent = unlocked
-    ? 'Everything is unlocked now that you’ve played today.'
-    : 'Practice places are never today’s. Finish today’s game to unlock everything.';
-  const sensorLive = S.sensor?.ready;
-  $('#prac-sliders').hidden = !!sensorLive;
+    ? 'Everything is unlocked now that you\u2019ve played today.'
+    : 'Practice places are never today\u2019s. Finish today\u2019s game to unlock everything.';
   if (!prac) {
     const [{ Globe }, rings] = await Promise.all([import('./globe.js'), land('110m')]);
     prac = { globe: new Globe($('#prac-globe'), rings) };
@@ -727,12 +762,31 @@ async function openPractice() {
   prac.globe.resize();
   prac.unlocked = unlocked;
   prac.entry = today;
+  // the same controls as guessing: the phone's compass, or the map with the draggable arrow
+  prac.sensor = S.input === 'sensor' && !!S.sensor?.ready;
+  $('#prac-instrument').hidden = !prac.sensor;
+  if (prac.sensor) {
+    const inst = instrument($('#prac-instrument'));
+    leaveHooks.push(S.sensor.onChange(() => {
+      const a = S.sensor.azEl(150);
+      if (a) { inst.compass.set(Math.abs(a.el) > 85 ? null : a.az); inst.tilt.set(a.el); }
+      drawPractice(false);
+    }));
+  } else {
+    placeMap($('#prac-controls'));
+    await ensureMap();
+    onMapMove = () => drawPractice(false);
+    leaveHooks.push(() => { onMapMove = null; });
+    requestAnimationFrame(() => mapView.resize());
+  }
+  $('#prac-globe-note').textContent = unlocked
+    ? 'Drag the globe to spin it. Red: your arrow, all the way through.'
+    : 'Drag the globe to spin it. Your arrow is shown as a short stub until you press Check.';
   newPracticeTarget();
-  if (sensorLive) leaveHooks.push(S.sensor.onChange(() => drawPractice(false)));
 }
 function pracDirection() {
-  if (S.sensor?.ready) return S.sensor.direction(150);
-  return fromAzEl(Number($('#prac-az').value), Number($('#prac-el').value));
+  if (prac.sensor) return S.sensor.direction(150);
+  return mapView ? fromAzEl(mapView.az, mapView.el) : null;
 }
 function newPracticeTarget() {
   if (!prac) return;
@@ -753,10 +807,8 @@ function drawPractice(face) {
   const d = pracDirection();
   if (!d) return;
   const a = toAzEl(d);
-  $('#prac-az-v').textContent = `${Math.round(a.az)}°`;
-  $('#prac-el-v').textContent = `${Math.round(a.el)}°`;
-  $('#prac-read').textContent = `Pointing ${Math.round(a.az)}° ${cardinal(a.az)}, ${readTilt(a.el)}`;
-  prac.globe.show({ origin: S.origin, target: prac.free ? null : prac.target, guessEnu: d, stub: !prac.unlocked, hideTarget: !prac.checked && !prac.unlocked, face });
+  $('#prac-read').textContent = `${Math.round(a.az)}° ${cardinal(a.az)} · ${readTilt(a.el)}`;
+  prac.globe.show({ origin: S.origin, target: prac.free ? null : prac.target, guessEnu: d, stub: !prac.unlocked && !prac.checked, hideTarget: !prac.checked && !prac.unlocked, face });
   if (prac.free) {
     const out = exitPoint(S.origin, a.az, a.el);
     const res = $('#prac-result');
@@ -769,14 +821,13 @@ function drawPractice(face) {
 }
 $('#prac-new').addEventListener('click', newPracticeTarget);
 $('#prac-pick').addEventListener('change', newPracticeTarget);
-$('#prac-az').addEventListener('input', () => drawPractice(false));
-$('#prac-el').addEventListener('input', () => drawPractice(false));
 $('#prac-check').addEventListener('click', () => {
   if (!prac?.target || prac.free) return;
   const d = pracDirection();
   const c = compareDirections(d, trueDirection(S.origin, prac.target));
   prac.checked = true;
   drawPractice(false);
+  $('#prac-globe').scrollIntoView({ behavior: 'smooth', block: 'center' });
   $('#prac-result').hidden = false;
   $('#prac-result').textContent = `${fmtDeg(c.error)} off (${scoreFor(c.error)}/100): ${describeMiss(c.horizontal, c.vertical)}. Press "New place" for another.`;
 });

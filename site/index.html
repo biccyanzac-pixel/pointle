@@ -52,6 +52,7 @@
       <div class="privacy"><span aria-hidden="true">🔒</span> <span class="privacy-text"></span></div>
       <div class="choices">
         <button type="button" class="choice" id="loc-gps"><span class="ico">📍</span><span><b>Use my location</b><small>City-level accuracy is plenty</small></span></button>
+        <p class="error" id="loc-msg" role="alert" hidden></p>
         <div class="field">
           <label class="label" for="town-q">Or pick your town</label>
           <input id="town-q" type="text" autocomplete="off" placeholder="Start typing a town or city">
@@ -59,7 +60,6 @@
         </div>
         <button type="button" class="choice" id="loc-fixed"><span class="ico">🏛️</span><span><b>Use today's fixed spot: <span class="fixed-name"></span></b><small>Everyone points from the same city (separate leaderboard)</small></span></button>
       </div>
-      <p class="error" id="loc-msg" role="alert" hidden></p>
       <button type="button" class="link" data-home>← Back</button>
     </div>
 
@@ -93,7 +93,7 @@
     <!-- play -->
     <div class="screen" id="play" hidden>
       <p class="eyebrow challenge-label" id="play-progress"></p>
-      <h2 class="prompt">Point at <span id="target-name"></span></h2>
+      <h2 class="prompt">Point at <span id="target-name"></span><span class="target-where" id="target-where"></span></h2>
       <p class="riddle-note" id="target-country"></p>
       <div id="sensor-read" hidden>
         <div class="instrument" id="play-instrument"></div>
@@ -105,7 +105,13 @@
         <div class="map-readout" id="map-readout">0°</div>
         <div class="tilt-ctl">
           <label for="tilt">Tilt</label>
-          <input id="tilt" type="range" min="-90" max="90" step="0.5" value="-20" aria-label="Tilt up or down">
+          <div class="tilt-track">
+            <span class="tilt-strip" aria-hidden="true"></span>
+            <span class="tilt-tag up" aria-hidden="true">up</span>
+            <span class="tilt-level" aria-hidden="true"><span>level</span></span>
+            <span class="tilt-tag down" aria-hidden="true">down</span>
+            <input id="tilt" type="range" min="-90" max="90" step="0.5" value="-20" aria-label="Tilt up or down">
+          </div>
         </div>
         <p class="map-tip">Grab the arrow's white tip and drag it, or drag the map to turn. Arrow keys work too.</p>
         <p class="attrib" id="imagery-attrib"></p>
@@ -152,9 +158,7 @@
       <form class="play" id="submit-form">
         <label class="field" id="name-field"><span class="label">Your name</span>
           <input id="nick" type="text" maxlength="20" autocomplete="nickname" placeholder="e.g. jacob" required></label>
-        <label class="field"><span class="label">Town to show (optional)</span>
-          <input id="town" type="text" maxlength="40" placeholder="Leave blank to show none"></label>
-        <p class="fineprint">Only the town name you type here is saved, nothing else about where you are.</p>
+        <p class="hint" id="town-line"></p>
         <p class="error" id="submit-msg" role="alert" hidden></p>
         <button class="submit" type="submit" id="submit-btn">Submit to the leaderboard</button>
       </form>
@@ -174,14 +178,13 @@
         <select id="prac-pick" aria-label="Practice target"></select>
         <button type="button" class="ghost-button" id="prac-new">New place</button>
       </div>
-      <canvas id="prac-globe" class="globe" aria-label="Practice globe. Drag to spin it."></canvas>
-      <div id="prac-sliders" class="sliders">
-        <label><span class="label">Heading</span><input id="prac-az" type="range" min="0" max="360" step="0.5" value="90"><span id="prac-az-v"></span></label>
-        <label><span class="label">Tilt</span><input id="prac-el" type="range" min="-90" max="90" step="0.5" value="-20"><span id="prac-el-v"></span></label>
-      </div>
-      <p id="prac-read" class="hint"></p>
+      <div id="prac-controls"></div>
+      <div class="instrument" id="prac-instrument" hidden></div>
+      <p id="prac-read" class="readline"></p>
       <button type="button" class="submit" id="prac-check">Check</button>
       <p id="prac-result" class="attempts-done" role="status" hidden></p>
+      <canvas id="prac-globe" class="globe" aria-label="Practice globe. Drag to spin it."></canvas>
+      <p class="hint center" id="prac-globe-note"></p>
       <button type="button" class="link" data-home>← Back</button>
     </div>
   </section>

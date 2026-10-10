@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS results (
   mode         TEXT NOT NULL CHECK (mode IN ('sensor', 'map', 'fixed-sensor', 'fixed-map')),
   device       TEXT NOT NULL CHECK (device IN ('phone', 'desktop')),
   name         TEXT NOT NULL,
-  town         TEXT,              -- optional, shown only; never used for grouping or filtering
+  town         TEXT,              -- nearest town / picked town / "Fixed spot: X"; shown only, never used for grouping or filtering
   targets      TEXT NOT NULL,     -- JSON array of target ids (3 a day)
   errors       TEXT NOT NULL,     -- JSON array of errors (degrees)
   durations    TEXT NOT NULL,     -- JSON array of durations (ms)

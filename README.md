@@ -7,11 +7,11 @@ A daily game: three places a day, and you point at each one in a **straight line
 New here (human or agent)? Read [docs/build-status.md](docs/build-status.md).
 
 ## Privacy
-> Your precise location never leaves your phone or computer — all the maths happens on your device. If you choose to show a town on the leaderboard, only that town name is saved.
+> Your precise location never leaves your phone or computer — all the maths happens on your device. The leaderboard only shows the nearest town to where you played from (worked out on your device), the town you picked, or that you used the fixed spot.
 
 How that holds, and its one caveat:
 - Location comes from the browser's geolocation API (or a town you pick from a list that's built into the site and searched on your device). It stays in memory. It isn't stored, logged, put in links or sent to the leaderboard.
-- The leaderboard receives your nickname, scores, per-target errors and timings, mode, device type (phone or desktop), the day's target ids, and **only if you type one**, a town name.
+- The leaderboard receives your nickname, scores, per-target errors and timings, mode, device type (phone or desktop), the day's target ids, and a **town name**: the nearest town (population 15,000+) to where you played from, found on your device from the built-in list; or the town you picked, marked "(picked)"; or "Fixed spot: <city>". Never coordinates. Players who want no town shown can use the fixed spot.
 - **Map mode caveat:** the satellite picture of your surroundings is loaded as image tiles from EOX (tiles.maps.eox.at). EOX can see *which* tiles were requested, which reveals your rough area (tiles are about 50 km across at the zoom used; nothing more precise is ever requested). No coordinates are sent. Fixed-spot mode only loads tiles of the public fixed city, and sensor mode loads no map tiles at all.
 - The optional "share globe picture" image shows roughly where you're pointing from. The game warns you before you share it.
 - `test-e2e/privacy.e2e.mjs` plays full games in a real browser with a mocked GPS fix and fails if any request (URL, headers or body) contains the coordinates, or goes to an unexpected host.
