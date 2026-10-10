@@ -35,25 +35,30 @@ export function browserName() {
 }
 
 /**
- * What to do when location is blocked. On iPhone the browser never shows a prompt if location is off for
- * it in Settings: it just refuses straight away, so spell out exactly where the switches are.
+ * What to do when location is blocked. A page cannot make the browser show its prompt: the browser
+ * decides. On iPhone it refuses without asking when location is off for the browser, or when it has
+ * saved a "Deny" for this particular site (one earlier tap on "Don't Allow" is enough). If other sites
+ * still get a prompt, it's the per-site setting.
+ * `instant`: the refusal came back too fast for anyone to have seen a prompt.
  */
-export function blockedHelp() {
+export function blockedHelp(instant = false) {
   if (inAppBrowser()) return 'This in-app browser blocks location. Open the page in Safari or Chrome instead (the ⋯ or share menu → Open in browser).';
   const b = browserName();
-  if (isIOS()) {
-    const app = b === 'Safari'
-      ? 'Settings → Privacy & Security → Location Services → Safari Websites → "While Using the App". Also check Settings → Apps → Safari → Location is "Ask" or "Allow".'
-      : `Settings → Privacy & Security → Location Services → ${b} → "While Using the App".`;
-    return `Your iPhone is blocking location for ${b}, so no prompt appears. Make sure Location Services is on, then ${app} Then reload this page and tap the button again.`;
+  const why = instant ? `${b} said no straight away without asking, so it has location switched off for this site. ` : '';
+  if (isIOS() && b === 'Safari') {
+    return `${why}Tap the "aA" (or the page menu) button at the left of the address bar → Website Settings → Location → "Ask" or "Allow", then reload and tap the button again. ` +
+      'If that\u2019s already Ask, check Settings → Apps → Safari → Location, and Settings → Privacy & Security → Location Services → Safari Websites → "While Using the App".';
   }
-  return `${b} is blocking location for this site. Tap the icon left of the address bar → Permissions (or Site settings) → Location → Allow. Also check Location is switched on in your phone's quick settings. Then tap the button again.`;
+  if (isIOS()) {
+    return `${why}Check Settings → Privacy & Security → Location Services → ${b} → "While Using the App", and the site settings in ${b}\u2019s menu. Then reload and tap the button again.`;
+  }
+  return `${why}Tap the icon left of the address bar → Permissions (or Site settings) → Location → Allow, and check Location is on in your phone\u2019s quick settings. Then tap the button again.`;
 }
 
 /** Human help for a failed location request (GeolocationPositionError code). */
-export function locationHelp(code) {
+export function locationHelp(code, instant = false) {
   if (!window.isSecureContext) return 'Location only works on the https:// version of the site.';
-  if (code === 1) return blockedHelp();
+  if (code === 1) return blockedHelp(instant);
   if (code === 3) return 'Getting your location took too long. Try again with Wi-Fi on, or pick your town.';
   return "Your phone couldn't work out where you are. Check Location is switched on in your phone's settings.";
 }
@@ -75,6 +80,7 @@ export async function locationPermission() {
  */
 export async function requestPosition() {
   if (!navigator.geolocation) throw Object.assign(new Error('Location is not available in this browser.'), { help: 'Pick your town instead.' });
+  const started = performance.now();
   try {
     return await getPosition({ enableHighAccuracy: false, maximumAge: 10 * 60 * 1000, timeout: 15000 });
   } catch (e) {
@@ -82,8 +88,10 @@ export async function requestPosition() {
     if (err.code !== 1) {
       try { return await getPosition({ enableHighAccuracy: true, maximumAge: 0, timeout: 25000 }); } catch (e2) { err = e2; }
     }
-    const msg = err.code === 1 ? 'Location is blocked.' : 'Could not get your location.';
-    throw Object.assign(new Error(msg), { code: err.code, help: locationHelp(err.code) });
+    // a refusal within ~1 s means no prompt was ever shown: the browser had already decided
+    const instant = err.code === 1 && performance.now() - started < 1000;
+    const msg = err.code === 1 ? (instant ? 'Your browser blocked location without asking.' : 'Location was not allowed.') : 'Could not get your location.';
+    throw Object.assign(new Error(msg), { code: err.code, instant, help: locationHelp(err.code, instant) });
   }
 }
 
