@@ -118,7 +118,7 @@ function renderHome() {
   $('#theme').textContent = WEEKDAY_NAMES[weekday(S.day)];
   $('#level').replaceChildren(window.JGG ? JGG.levelChip(S.day) : 'Today\'s places');
   // the name from earlier games (this one's or any jacob.gg game's), changeable here
-  if (window.JGG) JGG.playingAs({ mount: $('#playing-as'), name: store.nick || JGG.name(), onChange: (n) => { store.nick = n; save(); } });
+  if (window.JGG) JGG.playingAs({ mount: $('#playing-as'), name: JGG.name() || store.nick, onChange: (n) => { store.nick = n; save(); } });
   $('#archive-banner').hidden = !S.archive;
   $('#archive-banner-day').textContent = `Pointle #${puzzleNumber(S.day)}, ${fmtDay(S.day)}`;
   if (pick.from?.kind === 'fixed' && pick.from.day !== S.day) pick.from = null;   // the fixed spot changes daily
@@ -658,7 +658,7 @@ function showDone(mode) {
   $('#share-img').hidden = !canImg;
   $('#share-img-note').hidden = !canImg || mode.startsWith('fixed');
   $('#share-img').onclick = () => shareImage(total);
-  $('#nick').value = store.nick || window.JGG?.name() || '';
+  $('#nick').value = window.JGG?.name() || store.nick || '';
   const town = p.town ?? (mode.startsWith('fixed') ? `Fixed spot: ${fixedOrigin().n}` : null);
   $('#town-line').textContent = town ? `The leaderboard shows where you played from: ${town}.` : 'The leaderboard shows no town for this game.';
   $('#submit-form').hidden = !!p.submitted;
@@ -673,7 +673,7 @@ function showDone(mode) {
   // House rule: once you've given a name, finished games go on the leaderboard by themselves.
   // First-timers (no name yet) and failed submits keep the form.
   const key = `${S.day}:${slot(mode)}`;
-  if (!p.submitted && (store.nick || window.JGG?.name()) && !autoSubmitted.has(key)) { autoSubmitted.add(key); submitScore(mode); }
+  if (!p.submitted && (window.JGG?.name() || store.nick) && !autoSubmitted.has(key)) { autoSubmitted.add(key); submitScore(mode); }
 }
 
 async function shareImage(total) {
