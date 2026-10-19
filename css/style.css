@@ -29,6 +29,8 @@
 }
 
 [hidden] { display: none !important; }
+/* No grey flash on tap; every control below has its own :active state instead. */
+html { -webkit-tap-highlight-color: transparent; }
 a { color: var(--accent); }
 button { font: inherit; cursor: pointer; }
 
@@ -56,17 +58,20 @@ button { font: inherit; cursor: pointer; }
 /* --- buttons and fields (ridd-le) --- */
 .submit {
   width: 100%; padding: 0.85rem 1rem; font-weight: 650; letter-spacing: 0.02em; color: #fff;
-  background: var(--accent); border: 0; border-radius: 10px; transition: filter 0.15s ease, opacity 0.15s ease;
+  background: var(--accent); border: 0; border-radius: 10px;
+  transition: filter 0.15s ease, opacity 0.15s ease, transform var(--jgg-t-press, 120ms) var(--jgg-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
   margin-top: 1rem;
 }
-.submit:hover:not(:disabled) { filter: brightness(1.08); }
+@media (hover: hover) and (pointer: fine) { .submit:hover:not(:disabled) { filter: brightness(1.08); } }
 .submit:disabled { opacity: 0.45; cursor: not-allowed; }
 .ghost-button {
   background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 10px;
   padding: 0.6rem 1rem; font-weight: 600; margin-top: 1rem;
+  transition: transform var(--jgg-t-press, 120ms) var(--jgg-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 }
-.ghost-button:hover { border-color: var(--accent); }
+@media (hover: hover) and (pointer: fine) { .ghost-button:hover { border-color: var(--accent); } }
 .link { background: none; border: 0; padding: 0.4rem 0; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; margin-top: 0.75rem; }
+.link:active { opacity: 0.6; }
 .row-buttons { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
 .row-buttons > * { flex: 1 1 auto; }
 .row-buttons select { margin-top: 1rem; }
@@ -76,7 +81,7 @@ button { font: inherit; cursor: pointer; }
 .field { display: flex; flex-direction: column; gap: 0.4rem; }
 .label { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 input[type="text"], select {
-  width: 100%; padding: 0.7rem 0.85rem; font: inherit; color: var(--text);
+  width: 100%; padding: 0.7rem 0.85rem; font: inherit; font-size: max(16px, 1em); /* below 16px iOS zooms in on focus */ color: var(--text);
   background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
 }
 select { width: auto; }
@@ -107,9 +112,10 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 .pick-card {
   position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.2rem; text-align: center;
   padding: 0.85rem 0.6rem 0.9rem; color: var(--text); background: var(--surface-2);
-  border: 2px solid var(--border); border-radius: 14px; transition: border-color 0.15s ease, background 0.15s ease;
+  border: 2px solid var(--border); border-radius: 14px;
+  transition: border-color 0.15s ease, background 0.15s ease, transform var(--jgg-t-press, 120ms) var(--jgg-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 }
-.pick-card:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+@media (hover: hover) and (pointer: fine) { .pick-card:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); } }
 .pick-card[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .pick-card[aria-checked="true"]::after {
   content: "✓"; position: absolute; top: 6px; right: 8px; width: 1.3rem; height: 1.3rem; border-radius: 50%;
@@ -143,8 +149,9 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 .choice {
   display: flex; gap: 0.9rem; align-items: center; text-align: left; width: 100%;
   background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1rem;
+  transition: transform var(--jgg-t-press, 120ms) var(--jgg-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 }
-.choice:hover { border-color: var(--accent); }
+@media (hover: hover) and (pointer: fine) { .choice:hover { border-color: var(--accent); } }
 .choice b { display: block; }
 .choice small { display: block; color: var(--muted); font-size: 0.85rem; }
 .ico { font-size: 1.6rem; line-height: 1; }
@@ -168,15 +175,17 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
   margin: 1rem 0 0; padding: 0.65rem 0.85rem; font-size: 0.85rem; color: var(--muted);
   background: var(--surface-2); border-radius: 10px;
 }
-.results { list-style: none; margin: 0.25rem 0 0; padding: 0; max-height: 260px; overflow: auto; }
+.results { list-style: none; margin: 0.25rem 0 0; padding: 0; max-height: 260px; overflow: auto; overscroll-behavior: contain; }
 .results li button {
   width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--border); color: var(--text); padding: 0.6rem 0.4rem;
 }
-.results li button:hover, .results li button:focus { background: var(--surface-2); }
+.results li button:focus, .results li button:active { background: var(--surface-2); }
+@media (hover: hover) and (pointer: fine) { .results li button:hover { background: var(--surface-2); } }
 .results small { margin-left: 0.4rem; color: var(--muted); }
 .methods { border: 0; padding: 0; margin: 1.25rem 0 0; display: grid; gap: 0.6rem; }
 .methods legend { margin-bottom: 0.5rem; }
-.method { display: flex; gap: 0.75rem; align-items: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 0.8rem 0.9rem; cursor: pointer; }
+.method { display: flex; gap: 0.75rem; align-items: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 0.8rem 0.9rem; cursor: pointer;
+  -webkit-user-select: none; user-select: none; transition: transform var(--jgg-t-press, 120ms) var(--jgg-ease-out, cubic-bezier(0.23, 1, 0.32, 1)); }
 .method:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
 .method b, .method small { display: block; }
 .method small { color: var(--muted); font-size: 0.85rem; }
@@ -214,7 +223,7 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 .readline { text-align: center; margin: 0.25rem 0 0; font-weight: 650; font-variant-numeric: tabular-nums; font-size: 1.15rem; }
 
 /* --- map mode --- */
-.map-wrap { position: relative; height: min(64vh, 540px); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); margin-top: 1rem; background: #0b0c10; }
+.map-wrap { position: relative; height: min(64vh, 540px); height: min(64svh, 540px); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); margin-top: 1rem; background: #0b0c10; }
 .map-canvas { width: 100%; height: 100%; display: block; outline: none; cursor: grab; touch-action: none; }
 .map-canvas.over-arrow { cursor: pointer; }
 .map-canvas:active, .map-canvas.grabbing-arrow { cursor: grabbing; }
@@ -260,8 +269,9 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
   width: 38px; height: 38px; border-radius: 50%; font-size: 1.3rem; line-height: 1; font-weight: 700;
   color: var(--text); background: color-mix(in srgb, var(--surface-2) 45%, transparent);
   border: 1px solid color-mix(in srgb, var(--text) 25%, transparent); backdrop-filter: blur(3px);
+  transition: transform var(--jgg-t-press, 120ms) var(--jgg-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 }
-.globe-zoom button:hover:not(:disabled) { background: color-mix(in srgb, var(--surface-2) 80%, transparent); }
+@media (hover: hover) and (pointer: fine) { .globe-zoom button:hover:not(:disabled) { background: color-mix(in srgb, var(--surface-2) 80%, transparent); } }
 .globe-zoom button:disabled { opacity: 0.3; cursor: default; }
 .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.6rem; margin-top: 1rem; }
 .fact { background: var(--surface-2); border-radius: 10px; padding: 0.6rem 0.75rem; }
@@ -278,7 +288,8 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 
 /* --- leaderboard (ridd-le rows) --- */
 .tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.6rem; }
-.tabs button { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.85rem; font-weight: 600; }
+.tabs button { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.85rem; font-weight: 600;
+  transition: transform var(--jgg-t-press, 120ms) var(--jgg-ease-out, cubic-bezier(0.23, 1, 0.32, 1)); }
 .tabs button.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .tabs.small button { font-size: 0.78rem; padding: 0.25rem 0.7rem; }
 .rows { list-style: none; margin: 0.5rem 0 0; padding: 0; }
@@ -296,7 +307,7 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 .board-note { margin: 0.9rem 0 0; font-size: 0.8rem; color: var(--muted); }
 .groups { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--border); font-size: 0.9rem; }
 .groups summary { cursor: pointer; color: var(--muted); display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
-.groups summary select { padding: 0.3rem 0.5rem; font-size: 0.85rem; }
+.groups summary select { padding: 0.3rem 0.5rem; font-size: max(16px, 0.85rem); }
 .inline { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
 .inline input { flex: 1; }
 .inline .ghost-button { margin-top: 0; }
@@ -308,10 +319,12 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 .yesterday-score { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent); flex: none; min-width: 3em; }
 .yesterday-mode { margin-left: auto; color: var(--muted); font-size: 0.82rem; }
 .archive-note { margin: 0.5rem 0 1rem; color: var(--muted); font-size: 0.9rem; }
-.archive-browse { background: var(--accent); color: #fff; border: none; border-radius: 0.5rem; padding: 0.5rem 1rem; font-weight: 600; }
-.archive-list { list-style: none; margin: 0.75rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; max-height: 16rem; overflow-y: auto; }
+.archive-browse { background: var(--accent); color: #fff; border: none; border-radius: 0.5rem; padding: 0.5rem 1rem; font-weight: 600;
+  transition: transform var(--jgg-t-press, 120ms) var(--jgg-ease-out, cubic-bezier(0.23, 1, 0.32, 1)); }
+.archive-list { list-style: none; margin: 0.75rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; max-height: 16rem; overflow-y: auto; overscroll-behavior: contain; }
 .archive-list-item { width: 100%; display: flex; flex-direction: column; gap: 0.15rem; text-align: left; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.6rem 0.8rem; }
-.archive-list-item:hover { border-color: var(--accent); }
+@media (hover: hover) and (pointer: fine) { .archive-list-item:hover { border-color: var(--accent); } }
+.archive-list-item:active { background: var(--accent-soft); }
 .archive-list-day { font-size: 0.8rem; font-weight: 700; color: var(--accent); }
 .archive-list-prompt { font-size: 0.9rem; color: var(--muted); }
 .archive-list-empty { color: var(--muted); font-size: 0.9rem; }
@@ -330,8 +343,24 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 .credits { font-size: 0.72rem !important; }
 
 /* --- AR --- */
-.ar { position: fixed; inset: 0; z-index: 50; background: #000; }
+.ar { position: fixed; inset: 0; z-index: 50; background: #000; overscroll-behavior: none; }
 .ar video, .ar canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.ar-hint { position: absolute; top: max(16px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); background: rgb(0 0 0 / 0.65); color: #fff; padding: 0.5rem 1rem; border-radius: 999px; font-weight: 650; white-space: nowrap; }
-.ar-bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 14px 16px max(14px, env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgb(0 0 0 / 0.75)); color: #fff; }
+.ar-hint { position: absolute; top: max(16px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); background: rgb(0 0 0 / 0.65); color: #fff; padding: 0.5rem 1rem; border-radius: 999px; font-weight: 650;
+  /* wrap instead of running off a narrow phone, and stay clear of the notch in landscape */
+  width: max-content; max-width: calc(100% - max(16px, env(safe-area-inset-left, 0px)) - max(16px, env(safe-area-inset-right, 0px))); text-align: center; }
+.ar-bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 14px max(16px, env(safe-area-inset-right, 0px)) max(14px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: linear-gradient(transparent, rgb(0 0 0 / 0.75)); color: #fff; }
 .ar-bar .submit { width: auto; margin: 0; }
+
+/* --- touch: press feedback, and no text selection on controls --- */
+.submit, .ghost-button, .link, .pick-card, .choice, .tabs button, .globe-zoom button, .archive-browse,
+.archive-list-item, .results li button { -webkit-user-select: none; user-select: none; }
+.submit:active:not(:disabled), .ghost-button:active:not(:disabled), .pick-card:active:not(:disabled),
+.choice:active:not(:disabled), .tabs button:active:not(:disabled), .globe-zoom button:active:not(:disabled),
+.archive-browse:active:not(:disabled), .method:active { transform: scale(0.97); }
+@media (prefers-reduced-motion: reduce) {
+  .submit:active:not(:disabled), .ghost-button:active:not(:disabled), .pick-card:active:not(:disabled),
+  .choice:active:not(:disabled), .tabs button:active:not(:disabled), .globe-zoom button:active:not(:disabled),
+  .archive-browse:active:not(:disabled), .method:active { transform: none; opacity: 0.85; }
+}
+/* The radar and up/down bar only take touches while they can be aimed (not in phone mode), so the page scrolls past them otherwise. */
+.radar:not(.drag-on), .bar:not(.drag-on) { touch-action: auto; }

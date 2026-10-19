@@ -598,12 +598,14 @@ function dragOn(node, fn) {
   node.addEventListener('pointerdown', h.down); node.addEventListener('pointermove', h.move);
   node.addEventListener('pointerup', h.up); node.addEventListener('pointercancel', h.up);
   drags.set(node, h);
+  node.classList.add('drag-on');   // CSS: touch-action none only while it can be dragged
 }
 function dragOff(node) {
   const h = drags.get(node);
   if (!h) return;
   node.removeEventListener('pointerdown', h.down); node.removeEventListener('pointermove', h.move);
   node.removeEventListener('pointerup', h.up); node.removeEventListener('pointercancel', h.up);
+  node.classList.remove('drag-on');
 }
 
 $('#next').addEventListener('click', () => {
