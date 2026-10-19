@@ -652,7 +652,7 @@ function showDone(mode, fresh = false) {
   $('#done-total').textContent = `${total}`;
   $('#done-total').className = `score ${scoreClass(total, MAX_TOTAL)}`;
   $('#done-list').replaceChildren(...p.results.map((r) => el('li', { class: 'attempt-row' },
-    el('span', {}, `${emojiFor(r.error)} ${placeName(T(r.id))}`),
+    el('span', { class: 'attempt-name' }, `${emojiFor(r.error)} ${placeName(T(r.id))}`),
     el('span', { class: `attempt-score ${scoreClass(scoreFor(r.error), 100)}` }, `${fmtDeg(r.error)} · ${scoreFor(r.error)}`))));
   // just finished (not a revisit or reload): count the total up and cascade the rows. Never awaited:
   // share, the picture, the form and the board below show at once.
@@ -749,9 +749,9 @@ function rowNode(r, mode, period) {
   return el('li', { class: `row${r.you ? ' me' : ''}` },
     el('span', { class: 'row-rank' }, String(r.rank)),
     el('span', { class: 'row-main' },
-      el('span', { class: 'row-name' }, `${r.name}${mode.endsWith('map') ? (r.device === 'phone' ? ' 📱' : ' 💻') : ''}`),
+      el('span', { class: 'row-name', dir: 'auto', title: r.name ?? '' }, `${r.name ?? '—'}${mode.endsWith('map') ? (r.device === 'phone' ? ' 📱' : ' 💻') : ''}`),
       r.town || period === 'week' ? el('span', { class: 'row-sub' }, [r.town, period === 'week' ? `${r.days} day${r.days === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')) : ''),
-    el('span', { class: 'row-score' }, String(r.total)));
+    el('span', { class: 'row-score' }, String(r.total ?? '—')));
 }
 async function renderBoard() {
   const past = S.day !== S.today;
@@ -818,8 +818,8 @@ async function renderYesterday() {
   const boards = await Promise.all(MODES.map((m) => api.board({ mode: m, period: 'day', day: y }).catch(() => null)));
   boards.forEach((b, i) => {
     if (!b?.top?.length) return;
-    rows.append(el('li', { class: 'yesterday-row' }, el('span', { class: 'yesterday-score' }, String(b.top[0].total)),
-      el('span', {}, `🏆 ${b.top[0].name}`), el('span', { class: 'yesterday-mode' }, `${MODE_LABEL[MODES[i]]} · ${b.players} played`)));
+    rows.append(el('li', { class: 'yesterday-row' }, el('span', { class: 'yesterday-score' }, String(b.top[0].total ?? '—')),
+      el('span', { class: 'yesterday-name', dir: 'auto', title: b.top[0].name ?? '' }, `🏆 ${b.top[0].name ?? '—'}`), el('span', { class: 'yesterday-mode' }, `${MODE_LABEL[MODES[i]]} · ${b.players} played`)));
   });
   if (!rows.childElementCount) rows.append(el('li', { class: 'yesterday-row' }, el('span', {}, 'Nobody played yesterday.')));
 }

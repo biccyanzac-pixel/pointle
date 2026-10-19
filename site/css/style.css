@@ -237,6 +237,8 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 .map-compass .cmp-label.north { fill: #ff7a7a; }
 .map-compass .cmp-tick.major { stroke: #fff; }
 .map-readout { position: absolute; top: 108px; left: 50%; transform: translateX(-50%); background: rgb(0 0 0 / 0.6); color: #fff; padding: 2px 10px; border-radius: 999px; font-size: 0.85rem; font-weight: 650; font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap; }
+/* narrow phones: the compass and readout move left so the tilt control never covers them */
+@media (max-width: 380px) { .map-compass { left: calc(50% - 50px); } .map-readout { left: 6px; transform: none; font-size: 0.78rem; padding: 2px 8px; } }
 .tilt-ctl { position: absolute; right: 8px; top: 56px; bottom: 60px; display: flex; flex-direction: column; align-items: center; background: rgb(0 0 0 / 0.6); color: #fff; border-radius: 14px; padding: 8px 6px; width: 92px; }
 .tilt-ctl label { font-size: 0.72rem; margin: 0 0 4px; font-weight: 650; }
 /* the track: sky above level, earth below, with the horizon marked, like the phone's tilt gauge */
@@ -249,8 +251,10 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 .tilt-tag { opacity: 0.85; }
 .tilt-tag.up { top: 0; } .tilt-tag.down { bottom: 0; }
 .tilt-ctl input { position: absolute; top: 0; bottom: 0; left: 20px; height: 100%; width: 28px; margin: 0; writing-mode: vertical-lr; direction: rtl; accent-color: #ff7a7a; }
-.map-tip { position: absolute; bottom: 22px; left: 8px; right: 108px; margin: 0; font-size: 0.78rem; background: rgb(0 0 0 / 0.6); color: #fff; padding: 5px 9px; border-radius: 8px; pointer-events: none; }
-.attrib { position: absolute; bottom: 0; left: 0; right: 0; margin: 0; font-size: 0.6rem; background: rgb(0 0 0 / 0.7); padding: 2px 6px; color: #ddd; }
+/* the tip sits on top of the attribution, however many lines that wraps to */
+.map-foot { position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none; }
+.map-tip { margin: 0 108px 6px 8px; font-size: 0.78rem; background: rgb(0 0 0 / 0.6); color: #fff; padding: 5px 9px; border-radius: 8px; pointer-events: none; }
+.attrib { pointer-events: auto; margin: 0; font-size: 0.6rem; background: rgb(0 0 0 / 0.7); padding: 2px 6px; color: #ddd; }
 .attrib a { color: #cde; }
 .heading-ctl { display: grid; grid-template-columns: auto 1fr; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
 .heading-ctl input, .sliders input { width: 100%; accent-color: var(--bad); }
@@ -285,9 +289,10 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 /* --- done --- */
 .attempt-list { list-style: none; margin: 1.1rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .attempt-row { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding: 0.6rem 0.8rem; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); }
-.attempt-score { font-variant-numeric: tabular-nums; font-weight: 700; }
+.attempt-name { min-width: 0; overflow-wrap: anywhere; }
+.attempt-score { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; flex: none; }
 .attempt-score.good { color: var(--good); } .attempt-score.bad { color: var(--bad); }
-.share-preview { white-space: pre-wrap; background: var(--surface-2); border-radius: 10px; padding: 0.6rem 0.8rem; font: 0.85rem/1.45 ui-monospace, monospace; margin: 0.9rem 0 0; }
+.share-preview { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface-2); border-radius: 10px; padding: 0.6rem 0.8rem; font: 0.85rem/1.45 ui-monospace, monospace; margin: 0.9rem 0 0; }
 .attempts-done { margin: 1.1rem 0 0; padding: 0.7rem 0.9rem; font-size: 0.9rem; color: var(--muted); background: var(--surface-2); border-radius: 10px; text-align: center; }
 
 /* --- leaderboard (ridd-le rows) --- */
@@ -297,7 +302,7 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 .tabs button.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .tabs.small button { font-size: 0.78rem; padding: 0.25rem 0.7rem; }
 .rows { list-style: none; margin: 0.5rem 0 0; padding: 0; }
-.row { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr) auto; align-items: center; gap: 0.75rem; padding: 0.6rem 0.65rem; border-radius: 10px; border-top: 1px solid var(--border); }
+.row { display: grid; grid-template-columns: minmax(1.75rem, max-content) minmax(0, 1fr) auto; align-items: center; gap: 0.75rem; padding: 0.6rem 0.65rem; border-radius: 10px; border-top: 1px solid var(--border); }
 .row:first-child { border-top: 0; }
 .row.me { background: var(--accent-soft); border-top-color: transparent; }
 .row-rank { font-size: 0.85rem; font-weight: 650; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -311,7 +316,8 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 .board-note { margin: 0.9rem 0 0; font-size: 0.8rem; color: var(--muted); }
 .groups { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--border); font-size: 0.9rem; }
 .groups summary { cursor: pointer; color: var(--muted); display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
-.groups summary select { padding: 0.3rem 0.5rem; font-size: max(16px, 0.85rem); }
+.groups summary select { padding: 0.3rem 0.5rem; font-size: max(16px, 0.85rem); max-width: 100%; min-width: 0; text-overflow: ellipsis; }
+#group-msg { overflow-wrap: anywhere; }
 .inline { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
 .inline input { flex: 1; }
 .inline .ghost-button { margin-top: 0; }
@@ -319,8 +325,9 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 /* --- yesterday + archive (ridd-le) --- */
 .yesterday-prompt { margin: 0.35rem 0 0.9rem; font-size: 0.92rem; color: var(--muted); }
 .yesterday-rows { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
-.yesterday-row { display: flex; align-items: baseline; gap: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 10px; background: var(--surface-2); }
+.yesterday-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.75rem; padding: 0.5rem 0.75rem; border-radius: 10px; background: var(--surface-2); }
 .yesterday-score { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent); flex: none; min-width: 3em; }
+.yesterday-name { flex: 1 1 8em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .yesterday-mode { margin-left: auto; color: var(--muted); font-size: 0.82rem; }
 .archive-note { margin: 0.5rem 0 1rem; color: var(--muted); font-size: 0.9rem; }
 .archive-browse { background: var(--accent); color: #fff; border: none; border-radius: 0.5rem; padding: 0.5rem 1rem; font-weight: 600;
