@@ -90,6 +90,10 @@ const KIND = { city: 'City', landmark: 'Landmark', nature: 'Natural wonder' };
 const fixedOrigin = () => T(S.entry.origin);
 
 // ---------- screens (inside the game card) ----------
+// Shared motion (kit, docs/motion-system.md). The kit loads with defer and may be missing: every call has a
+// plain fallback with the same end state.
+const motion = () => window.JGG?.motion;
+const scrollTo = (node, block = 'start') => (motion() ? motion().scroll(node, { block }) : node.scrollIntoView({ block }));
 let current = 'home';
 const leaveHooks = [];
 function show(id, { scroll = true } = {}) {
@@ -97,7 +101,7 @@ function show(id, { scroll = true } = {}) {
   $$('#game .screen').forEach((s) => { s.hidden = s.id !== id; });
   current = id;
   if (id === 'home') renderHome();
-  if (scroll) $('#game').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (scroll) scrollTo($('#game'));
 }
 document.addEventListener('click', (e) => { if (e.target.closest('[data-home]')) show('home'); });
 function fillPrivacy() {
@@ -181,7 +185,7 @@ function originChosen(origin, label, fixed, town) {
 }
 function locationFailed(message, help) {
   showError($('#loc-msg'), `${message} You can pick your town instead: start typing it below.`, help);
-  $('#loc-msg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  scrollTo($('#loc-msg'), 'center');
   $('#town-q').focus({ preventScroll: true });
 }
 $('#loc-gps').addEventListener('click', async () => {
@@ -524,6 +528,9 @@ async function showReveal(i, guess, truth) {
     fact(fmtKm(f.flightKm), 'flying round the surface'),
     fact(fmtKm(f.deepestKm), `deepest point of the tunnel, in ${layer}`),
   );
+  // the score counts up (any tap skips it) and the result cascades in; #next is usable at once
+  motion()?.settle($('#rev-score'), pts);
+  motion()?.reveal([$('#rev-score'), $('.rev-detail'), ...$$('#facts .fact')]);
   const { Radar, TiltBar } = await import('./radar.js');
   const rings = await land(f.centralAngle > 60 ? '110m' : '50m');
   const radar = new Radar($('#radar'), { origin: S.origin, target: t, targetName: t.n, trueAzEl: tA, rings });
@@ -533,7 +540,7 @@ async function showReveal(i, guess, truth) {
   const { Globe } = await import('./globe.js');
   S.globe ??= new Globe($('#globe'), await land('110m'));
   S.globe.resize();
-  S.globe.show({ origin: S.origin, target: t, guessEnu: guess, guessColour: '--ink' });
+  S.globe.show({ origin: S.origin, target: t, guessEnu: guess, guessColour: '--ink', glide: true });
   S.lastShare = { origin: S.origin, target: t, guess };
   let globeDirty = false, lastLive = null;
   const setLive = (dir) => { lastLive = dir; globeDirty = true; };
@@ -610,7 +617,7 @@ function dragOff(node) {
 
 $('#next').addEventListener('click', () => {
   const g = S.game;
-  if (g.idx >= N) { const m = g.mode; S.game = null; showDone(m); } else showTarget();
+  if (g.idx >= N) { const m = g.mode; S.game = null; showDone(m, true); } else showTarget();
 });
 
 // ---------- AR ----------
@@ -636,7 +643,7 @@ $('#ar-close').addEventListener('click', () => {
 function siteUrl() { const u = new URL(location.href); u.search = ''; u.hash = ''; return u.toString(); }
 
 const autoSubmitted = new Set(); // day:slot keys auto-submitted this visit (never retried automatically)
-function showDone(mode) {
+function showDone(mode, fresh = false) {
   const p = playFor(mode);
   show('done');
   const errors = p.results.map((r) => r.error);
@@ -647,6 +654,9 @@ function showDone(mode) {
   $('#done-list').replaceChildren(...p.results.map((r) => el('li', { class: 'attempt-row' },
     el('span', {}, `${emojiFor(r.error)} ${placeName(T(r.id))}`),
     el('span', { class: `attempt-score ${scoreClass(scoreFor(r.error), 100)}` }, `${fmtDeg(r.error)} · ${scoreFor(r.error)}`))));
+  // just finished (not a revisit or reload): count the total up and cascade the rows. Never awaited:
+  // share, the picture, the form and the board below show at once.
+  if (fresh) { motion()?.settle($('#done-total'), total); motion()?.reveal($$('#done-list .attempt-row')); }
   const link = `${siteUrl()}?r=${encodeResult({ day: S.day, mode, errors })}`;
   const text = shareText(puzzleNumber(S.day), p.results.map((r) => ({ name: T(r.id).n, error: r.error })), link, MODE_LABEL[mode]);
   $('#share-preview').textContent = text;
@@ -725,7 +735,7 @@ async function submitScore(mode) {
     boardMode = mode;
     boardLate = S.archive && S.day !== S.today;
     await renderBoard();
-    $('#board').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollTo($('#board'));
   } catch (err) {
     showError(msg, err.message);
   } finally {
@@ -830,8 +840,9 @@ function renderArchiveList() {
 }
 $('#archive-browse').addEventListener('click', () => {
   const list = $('#archive-list');
-  list.hidden = !list.hidden;
-  if (!list.hidden) renderArchiveList();
+  if (!list.hidden) { list.hidden = true; return; }
+  renderArchiveList();
+  motion() ? motion().enter(list) : (list.hidden = false);
 });
 function openArchiveDay(d) {
   S.archive = true; S.day = d; S.entry = entryForDay(d); S.game = null;
@@ -939,7 +950,7 @@ $('#prac-check').addEventListener('click', () => {
   const c = compareDirections(d, trueDirection(S.origin, prac.target));
   prac.checked = true;
   drawPractice(false);
-  $('#prac-globe').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  scrollTo($('#prac-globe'), 'center');
   $('#prac-result').hidden = false;
   $('#prac-result').textContent = `${fmtDeg(c.error)} off (${scoreFor(c.error)}/100): ${describeMiss(c.horizontal, c.vertical)}. Press "New place" for another.`;
 });
