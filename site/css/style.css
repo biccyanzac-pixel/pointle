@@ -238,7 +238,7 @@ input[type="text"]:focus-visible, .submit:focus-visible, select:focus-visible { 
 .map-compass .cmp-tick.major { stroke: #fff; }
 .map-readout { position: absolute; top: 108px; left: 50%; transform: translateX(-50%); background: rgb(0 0 0 / 0.6); color: #fff; padding: 2px 10px; border-radius: 999px; font-size: 0.85rem; font-weight: 650; font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap; }
 /* narrow phones: the compass and readout move left so the tilt control never covers them */
-@media (max-width: 380px) { .map-compass { left: calc(50% - 50px); } .map-readout { left: 6px; transform: none; font-size: 0.78rem; padding: 2px 8px; } }
+@media (max-width: 430px) { .map-compass { left: calc(50% - 50px); } .map-readout { left: 6px; transform: none; font-size: 0.78rem; padding: 2px 8px; max-width: calc(100% - 114px); white-space: normal; } }
 .tilt-ctl { position: absolute; right: 8px; top: 56px; bottom: 60px; display: flex; flex-direction: column; align-items: center; background: rgb(0 0 0 / 0.6); color: #fff; border-radius: 14px; padding: 8px 6px; width: 92px; }
 .tilt-ctl label { font-size: 0.72rem; margin: 0 0 4px; font-weight: 650; }
 /* the track: sky above level, earth below, with the horizon marked, like the phone's tilt gauge */

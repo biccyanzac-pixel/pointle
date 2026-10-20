@@ -177,8 +177,22 @@ export class Globe {
     this.render();
   }
 
-  /** On-demand rAF: slerp the globe to `to`, then stop. A drag or a new framing cancels it. */
+  /**
+   * On-demand rAF: slerp the globe to `to`, then stop. It waits until the globe is at least half on screen (it
+   * usually sits below the fold, and a glide nobody sees is just work). A drag or a new framing cancels it.
+   */
   glideTo(to) {
+    this.stopGlide();
+    if (typeof IntersectionObserver === 'undefined') return this.runGlide(to);
+    this.glideSeen = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.intersectionRatio >= 0.5)) return;
+      this.glideSeen.disconnect(); this.glideSeen = null;
+      this.runGlide(to);
+    }, { threshold: 0.5 });
+    this.glideSeen.observe(this.canvas);
+  }
+
+  runGlide(to) {
     const from = this.world.quaternion.clone();
     let t0 = 0;
     const step = (now) => {
@@ -191,7 +205,7 @@ export class Globe {
     this.glideRaf = requestAnimationFrame(step);
   }
 
-  stopGlide() { cancelAnimationFrame(this.glideRaf); this.glideRaf = 0; }
+  stopGlide() { cancelAnimationFrame(this.glideRaf); this.glideRaf = 0; this.glideSeen?.disconnect(); this.glideSeen = null; }
 
   /**
    * Live arrow from the origin along an ENU direction (phone pointing, or the swept direction in map mode).
