@@ -529,7 +529,7 @@ async function showReveal(i, guess, truth) {
     fact(fmtKm(f.deepestKm), `deepest point of the tunnel, in ${layer}`),
   );
   // the score counts up (any tap skips it) and the result cascades in; #next is usable at once
-  motion()?.settle($('#rev-score'), pts);
+  motion()?.settle($('#rev-score'), pts, { duration: 280 }); // 3 times a day: quick (the daily total keeps 700 ms)
   motion()?.reveal([$('#rev-score'), $('.rev-detail'), ...$$('#facts .fact')]);
   const { Radar, TiltBar } = await import('./radar.js');
   const rings = await land(f.centralAngle > 60 ? '110m' : '50m');
