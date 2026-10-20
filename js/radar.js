@@ -3,7 +3,13 @@
 // mode like a maps app. Plus the vertical "spirit level" bar for up/down.
 import { centralAngle, initialBearing, DEG, wrap360 } from './geo.js';
 
-const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+// Theme colours, read once (not per frame) and re-read when the colour scheme flips.
+const cssCache = new Map();
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => cssCache.clear());
+const css = (name) => {
+  if (!cssCache.has(name)) cssCache.set(name, getComputedStyle(document.documentElement).getPropertyValue(name).trim());
+  return cssCache.get(name);
+};
 
 export class Radar {
   /**
