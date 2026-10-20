@@ -554,10 +554,21 @@ async function showReveal(i, guess, truth) {
     ? 'Sweep your phone around: the map turns with you and the red arrow on the globe follows. Find the green dot and the green line on the bar.'
     : 'Drag around the map to turn, drag the bar to tilt, or click a spot on the globe: the red arrow follows. Line up with the green marks.';
   if (sensor) {
-    let buzzed = false;
+    // Redraw on demand, at most every 33 ms as before, and only when the reading has moved (a phone held
+    // still, or a sensor repeating itself, no longer costs a frame every 33 ms)
+    let buzzed = false, raf = 0, lastDraw = 0, lastKey = '';
+    const loop = (now) => {
+      raf = 0;
+      if (now - lastDraw > 33) { draw(); lastDraw = now; } else raf = requestAnimationFrame(loop);
+    };
+    const kick = () => { raf ||= requestAnimationFrame(loop); };
     const off = S.sensor.onChange(() => {
       const a = S.sensor.azEl(150);
       if (!a) return;
+      const key = `${a.az.toFixed(1)} ${a.el.toFixed(1)}`;
+      if (key === lastKey) return;
+      lastKey = key;
+      kick();
       radar.headingUp = Math.abs(a.el) < 80 ? a.az : radar.headingUp;
       radar.pointer = a; bar.live = a.el;
       setLive(fromAzEl(a.az, a.el));
@@ -565,9 +576,7 @@ async function showReveal(i, guess, truth) {
       if (close && !buzzed && navigator.vibrate) navigator.vibrate([40, 60, 40]);
       buzzed = close;
     });
-    let raf = 0, lastDraw = 0;
-    const loop = (now) => { if (now - lastDraw > 33) { draw(); lastDraw = now; } raf = requestAnimationFrame(loop); };
-    raf = requestAnimationFrame(loop);
+    kick();
     leaveHooks.push(off, () => cancelAnimationFrame(raf));
   } else {
     radar.pointer = { ...gA }; bar.live = gA.el;

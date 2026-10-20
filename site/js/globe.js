@@ -3,7 +3,13 @@
 import * as THREE from '../vendor/three/three.module.min.js';
 import { DEG, enuToEcef, normalize } from './geo.js';
 
-const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+// Theme colours, read once (not per frame) and re-read when the colour scheme flips.
+const cssCache = new Map();
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => cssCache.clear());
+const css = (name) => {
+  if (!cssCache.has(name)) cssCache.set(name, getComputedStyle(document.documentElement).getPropertyValue(name).trim());
+  return cssCache.get(name);
+};
 
 // Zoom limits, as camera distance from the Earth's centre (radius 1). The default view is the furthest out:
 // you can zoom in towards the surface but never shrink the world below its starting size.
@@ -97,7 +103,7 @@ export class Globe {
   }
 
   clearMarks() {
-    for (const c of [...this.marks.children]) { this.marks.remove(c); c.geometry?.dispose(); }
+    for (const c of [...this.marks.children]) { this.marks.remove(c); c.geometry?.dispose(); c.material?.dispose(); }
   }
 
   /** Marker scale for the current zoom, so dots and lines keep about the same size on screen. */
@@ -193,7 +199,7 @@ export class Globe {
    */
   setLive(enu, colour = '--bad') {
     this.lastLive = [enu, colour];
-    for (const c of [...this.live.children]) { this.live.remove(c); c.geometry?.dispose(); }
+    for (const c of [...this.live.children]) { this.live.remove(c); c.geometry?.dispose(); c.material?.dispose(); }
     if (!enu || !this.origin) { this.render(); return; }
     const p = spherePoint(this.origin.lat, this.origin.lon);
     const d = enuToWorld(enu, this.origin.lat, this.origin.lon);
