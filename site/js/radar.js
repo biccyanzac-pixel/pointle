@@ -57,6 +57,27 @@ export class Radar {
     return [c * Math.sin(b) * this.scale, -c * Math.cos(b) * this.scale, c];
   }
 
+  /**
+   * project() and centralAngle() for many points: the same formulas as geo.js, with the origin's trig
+   * worked out once and no objects per point (the coastline loop calls these tens of thousands of times).
+   */
+  projector() {
+    const p1 = this.origin.lat * DEG, lon1 = this.origin.lon, cp1 = Math.cos(p1), sp1 = Math.sin(p1), scale = this.scale;
+    const arc = (lon, lat) => {
+      const p2 = lat * DEG, dl = (lon - lon1) * DEG;
+      const h = Math.sin((p2 - p1) / 2) ** 2 + cp1 * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+      return (2 * Math.asin(Math.min(1, Math.sqrt(h)))) / DEG;
+    };
+    const project = (lon, lat) => {
+      const p2 = lat * DEG, dl = (lon - lon1) * DEG, cp2 = Math.cos(p2);
+      const h = Math.sin((p2 - p1) / 2) ** 2 + cp1 * cp2 * Math.sin(dl / 2) ** 2;
+      const c = (2 * Math.asin(Math.min(1, Math.sqrt(h)))) / DEG;
+      const b = Math.atan2(Math.sin(dl) * cp2, cp1 * Math.sin(p2) - sp1 * cp2 * Math.cos(dl));
+      return [c * Math.sin(b) * scale, -c * Math.cos(b) * scale, c];
+    };
+    return { arc, project };
+  }
+
   /** Where a pointing direction lands on the map: the exit point of the ray, or the edge if it's skyward. */
   directionToXY(az, el) {
     const c = el < 0 ? -2 * el : Infinity;   // a chord dipping d degrees spans 2d degrees of arc
@@ -86,6 +107,7 @@ export class Radar {
     // tolerance that stays under TOL_PX after the projection's sideways stretch (c / sin c); off it, the
     // coarsest whose chords can't reach the circle. 'tags >= need' selects that simplification.
     const s = this.scale, vis = this.extent + EDGE_PX / s;
+    const sinHalfSpan = ladder.map((e) => Math.sin((Math.min(maxSpan * e, 180) * DEG) / 2));
     const needFor = (dmin, dmax, r) => {
       let j = -1;
       if (dmin <= vis) {
@@ -95,15 +117,19 @@ export class Radar {
         const tol = TOL_PX / (s * stretch);
         while (j + 1 < ladder.length && ladder[j + 1] <= tol) j++;
       } else {
+        // a chord of length L between points at least dmin away turns by 2 asin(sin(L/2) / sin c) at most,
+        // so it stays at least dmin cos(that / 2) from the centre
         const sinMin = Math.min(Math.sin(dmin * DEG), Math.sin(Math.min(dmax, 180) * DEG));
+        const room = (vis / dmin) ** 2;
         while (j + 1 < ladder.length) {
-          const half = Math.sin(Math.min(maxSpan * ladder[j + 1], 180) * DEG / 2) / sinMin;
-          if (half >= 1 || dmin * Math.cos(Math.asin(half)) < vis) break;
+          const half = sinHalfSpan[j + 1] / sinMin;
+          if (half >= 1 || 1 - half * half < room) break;
           j++;
         }
       }
       return j + 1;
     };
+    const { arc, project } = this.projector();
     const pts = [];
     for (const [ring, tags, caps] of rings) {
       let pen = false, wrapped = false;
@@ -111,23 +137,22 @@ export class Radar {
       const n = ring.length / 2;
       for (let k = 0, a = 0; a < n - 1; k++, a += CH) {
         const b = Math.min(a + CH, n - 1);
-        const dc = centralAngle(this.origin, { lon: caps[3 * k], lat: caps[3 * k + 1] }), r = caps[3 * k + 2];
+        const dc = arc(caps[3 * k], caps[3 * k + 1]), r = caps[3 * k + 2];
         const dmin = Math.max(0, dc - r), dmax = dc + r;
         // a ring reaching within 2 degrees of your antipode can't be filled; test every vertex, as before
         if (!wrapped && dmax > 178) {
           if (dmin > 178) wrapped = true;
-          else for (let i = a; i <= b && !wrapped; i++) if (centralAngle(this.origin, { lon: ring[2 * i], lat: ring[2 * i + 1] }) > 178) wrapped = true;
+          else for (let i = a; i <= b && !wrapped; i++) if (arc(ring[2 * i], ring[2 * i + 1]) > 178) wrapped = true;
         }
         const need = needFor(dmin, dmax, r);
         for (let i = a ? a + 1 : a; i <= b; i++) {
           if (need && level(tags.charCodeAt(i)) < need) continue;
-          pts.push(this.project({ lon: ring[2 * i], lat: ring[2 * i + 1] }));
+          pts.push(project(ring[2 * i], ring[2 * i + 1]));
         }
       }
-      if (!wrapped) {
-        pts.forEach(([x, y], i) => (i ? fill.lineTo(x, y) : fill.moveTo(x, y)));
-        fill.closePath();
-      }
+      // fill() closes each ring itself; an explicit closePath() costs Chrome time in proportion to the
+      // whole path so far, which made this loop quadratic
+      if (!wrapped) pts.forEach(([x, y], i) => (i ? fill.lineTo(x, y) : fill.moveTo(x, y)));
       for (const [x, y, c] of pts) {
         if (c > limit) { pen = false; continue; }
         if (pen) stroke.lineTo(x, y); else { stroke.moveTo(x, y); pen = true; }
