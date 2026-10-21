@@ -475,6 +475,8 @@ async function showTarget() {
     mapView.setDirection(Math.random() * 360, -20 + (Math.random() - 0.5) * 10); // no hint from the start pose
     requestAnimationFrame(() => mapView.resize());
   }
+  // load what this place's reveal radar needs while you aim, so the reveal can draw it at once
+  setTimeout(() => { import('./radar.js').catch(() => {}); radarLand(radarRes(t)).catch(() => {}); }, 300);
 }
 $('#tilt').addEventListener('input', (e) => mapView?.setDirection(mapView.az, Number(e.target.value)));
 $('#heading').addEventListener('input', (e) => mapView?.setDirection(Number(e.target.value), mapView.el));
@@ -505,6 +507,14 @@ function land(res) {
   landCache[res] ??= fetch(`data/land-${res}.json`).then((r) => r.json()).then((d) => d.rings);
   return landCache[res];
 }
+// The radar's multi-resolution coastlines (tools/build_radar_land.mjs): 50m detail up to 60 degrees away.
+const radarLandCache = {};
+const radarRes = (t) => (tunnelFacts(S.origin, t).centralAngle > 60 ? '110m' : '50m');
+function radarLand(res) {
+  radarLandCache[res] ??= fetch(`data/radar/land-${res}.json`).then((r) => r.json()).then((d) => ({ ...d, res }))
+    .catch((e) => { delete radarLandCache[res]; throw e; });
+  return radarLandCache[res];
+}
 
 async function showReveal(i, guess, truth) {
   const g = S.game;
@@ -531,11 +541,13 @@ async function showReveal(i, guess, truth) {
   // the score counts up (any tap skips it) and the result cascades in; #next is usable at once
   motion()?.settle($('#rev-score'), pts, { duration: 280 }); // 3 times a day: quick (the daily total keeps 700 ms)
   motion()?.reveal([$('#rev-score'), $('.rev-detail'), ...$$('#facts .fact')]);
-  const { Radar, TiltBar } = await import('./radar.js');
-  const rings = await land(f.centralAngle > 60 ? '110m' : '50m');
-  const radar = new Radar($('#radar'), { origin: S.origin, target: t, targetName: t.n, trueAzEl: tA, rings });
+  const [{ Radar, TiltBar }, radarCoast] = await Promise.all([import('./radar.js'), radarLand(radarRes(t))]);
+  const radar = new Radar($('#radar'), { origin: S.origin, target: t, targetName: t.n, trueAzEl: tA, land: radarCoast });
   const bar = new TiltBar($('#bar'), { trueEl: tA.el });
   radar.guess = gA; bar.guess = gA.el;
+  const sensor = S.input === 'sensor';
+  if (!sensor) { radar.pointer = { ...gA }; bar.live = gA.el; }
+  radar.draw(); bar.draw();   // first, before the globe is set up
   // globe: true line (green) and your guess (white) stay put; the red arrow follows you live
   const { Globe } = await import('./globe.js');
   S.globe ??= new Globe($('#globe'), await land('110m'));
@@ -548,7 +560,6 @@ async function showReveal(i, guess, truth) {
     radar.draw(); bar.draw();
     if (globeDirty) { S.globe.setLive(lastLive); globeDirty = false; }
   };
-  const sensor = S.input === 'sensor';
   $('#live-legend').textContent = sensor ? 'where you’re pointing now' : 'drag the map and bar to explore';
   $('#sweep-tip').textContent = sensor
     ? 'Sweep your phone around: the map turns with you and the red arrow on the globe follows. Find the green dot and the green line on the bar.'
@@ -579,7 +590,6 @@ async function showReveal(i, guess, truth) {
     kick();
     leaveHooks.push(off, () => cancelAnimationFrame(raf));
   } else {
-    radar.pointer = { ...gA }; bar.live = gA.el;
     setLive(guess);
     const sweepAz = (e) => { radar.pointer.az = radar.azimuthAt(e.clientX, e.clientY); setLive(fromAzEl(radar.pointer.az, radar.pointer.el)); draw(); };
     const sweepEl = (e) => { radar.pointer.el = bar.elAt(e.clientY); bar.live = radar.pointer.el; setLive(fromAzEl(radar.pointer.az, radar.pointer.el)); draw(); };

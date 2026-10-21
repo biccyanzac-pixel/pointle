@@ -11,17 +11,28 @@ const css = (name) => {
   return cssCache.get(name);
 };
 
+// Drawn base layers, shared by every Radar (three reveals a day, redraws, resizes), keyed by baseKey().
+// A colour-scheme flip changes the colours in the key, so the next draw renders afresh.
+const baseCache = new Map();
+const BASE_CACHE_MAX = 4;
+const BASE_COLOURS = ['--sea', '--land', '--coast', '--grid', '--ink-2'];
+const TOL_PX = 0.25;   // max simplification error on screen, device px
+const EDGE_PX = 4;     // detail kept this far outside the map circle (coast line width + antialiasing)
+const SPECK_PX = 4;    // chunks smaller than this on screen are drawn at full detail
+const level = (code) => (code < 58 ? code - 48 : code - 87);   // base-36 vertex tag
+
 export class Radar {
   /**
-   * origin, target: { lat, lon }; trueAzEl: { az, el } of the true line; rings: land rings ([lon, lat, ...]).
+   * origin, target: { lat, lon }; trueAzEl: { az, el } of the true line; land: multi-resolution coastlines
+   * from data/radar/land-*.json (tools/build_radar_land.mjs), with res '50m' or '110m'.
    */
-  constructor(canvas, { origin, target, targetName, trueAzEl, rings }) {
+  constructor(canvas, { origin, target, targetName, trueAzEl, land }) {
     this.canvas = canvas;
     this.origin = origin;
     this.target = target;
     this.targetName = targetName;
     this.truth = trueAzEl;
-    this.rings = rings;
+    this.land = land;
     this.extent = Math.max(centralAngle(origin, target), 0.5); // degrees of arc at the map edge
     this.headingUp = null;  // degrees, or null for north-up
     this.pointer = null;    // { az, el } live
@@ -38,7 +49,6 @@ export class Radar {
     this.R = this.px / 2;
     this.mapR = this.R * 0.8;     // map circle radius; the compass ring sits outside it
     this.scale = this.mapR / this.extent;
-    this.base = null;
   }
 
   /** Pixel offset (north-up, y down) of a ground point from the centre. */
@@ -55,6 +65,12 @@ export class Radar {
     return { x: Math.sin(az * DEG) * r, y: -Math.cos(az * DEG) * r, clipped };
   }
 
+  /** Cache key for the base layer: everything it depends on (origin, zoom, size, colours). */
+  baseKey() {
+    const { origin: o } = this;
+    return `${o.lat},${o.lon}|${this.extent}|${this.px}|${this.land.res}|${BASE_COLOURS.map(css).join(',')}`;
+  }
+
   renderBase() {
     const cv = document.createElement('canvas');
     cv.width = cv.height = this.px;
@@ -65,13 +81,48 @@ export class Radar {
     g.save(); g.clip();
     const fill = new Path2D(), stroke = new Path2D();
     const limit = Math.min(179, this.extent * 1.6);
-    for (const ring of this.rings) {
+    const { ladder, chunk: CH, maxSpan, rings } = this.land;
+    // Level of detail per chunk (see tools/build_radar_land.mjs): on the map circle, the coarsest
+    // tolerance that stays under TOL_PX after the projection's sideways stretch (c / sin c); off it, the
+    // coarsest whose chords can't reach the circle. 'tags >= need' selects that simplification.
+    const s = this.scale, vis = this.extent + EDGE_PX / s;
+    const needFor = (dmin, dmax, r) => {
+      let j = -1;
+      if (dmin <= vis) {
+        // a speck of an island stays exact: its stroke's mitred corners make it look bigger than its outline
+        if (r * s < SPECK_PX) return 0;
+        const c = Math.min(dmax, vis, 179) * DEG, stretch = c > 1e-6 ? c / Math.sin(c) : 1;
+        const tol = TOL_PX / (s * stretch);
+        while (j + 1 < ladder.length && ladder[j + 1] <= tol) j++;
+      } else {
+        const sinMin = Math.min(Math.sin(dmin * DEG), Math.sin(Math.min(dmax, 180) * DEG));
+        while (j + 1 < ladder.length) {
+          const half = Math.sin(Math.min(maxSpan * ladder[j + 1], 180) * DEG / 2) / sinMin;
+          if (half >= 1 || dmin * Math.cos(Math.asin(half)) < vis) break;
+          j++;
+        }
+      }
+      return j + 1;
+    };
+    const pts = [];
+    for (const [ring, tags, caps] of rings) {
       let pen = false, wrapped = false;
-      const pts = [];
-      for (let i = 0; i < ring.length; i += 2) {
-        const [x, y, c] = this.project({ lon: ring[i], lat: ring[i + 1] });
-        if (c > 178) wrapped = true;
-        pts.push([x, y, c]);
+      pts.length = 0;
+      const n = ring.length / 2;
+      for (let k = 0, a = 0; a < n - 1; k++, a += CH) {
+        const b = Math.min(a + CH, n - 1);
+        const dc = centralAngle(this.origin, { lon: caps[3 * k], lat: caps[3 * k + 1] }), r = caps[3 * k + 2];
+        const dmin = Math.max(0, dc - r), dmax = dc + r;
+        // a ring reaching within 2 degrees of your antipode can't be filled; test every vertex, as before
+        if (!wrapped && dmax > 178) {
+          if (dmin > 178) wrapped = true;
+          else for (let i = a; i <= b && !wrapped; i++) if (centralAngle(this.origin, { lon: ring[2 * i], lat: ring[2 * i + 1] }) > 178) wrapped = true;
+        }
+        const need = needFor(dmin, dmax, r);
+        for (let i = a ? a + 1 : a; i <= b; i++) {
+          if (need && level(tags.charCodeAt(i)) < need) continue;
+          pts.push(this.project({ lon: ring[2 * i], lat: ring[2 * i + 1] }));
+        }
       }
       if (!wrapped) {
         pts.forEach(([x, y], i) => (i ? fill.lineTo(x, y) : fill.moveTo(x, y)));
@@ -90,11 +141,25 @@ export class Radar {
     g.restore();
     g.beginPath(); g.arc(0, 0, this.mapR, 0, Math.PI * 2);
     g.strokeStyle = css('--ink-2'); g.lineWidth = 2; g.setLineDash([]); g.stroke();
-    this.base = cv;
+    return cv;
+  }
+
+  /** The base layer (sea, land, coast, distance rings), drawn once per origin, zoom, size and colours. */
+  baseLayer() {
+    const key = this.baseKey();
+    if (this.base?.key !== key) {
+      let cv = baseCache.get(key);
+      if (cv) baseCache.delete(key);   // re-insert: most recently used last
+      else cv = this.renderBase();
+      baseCache.set(key, cv);
+      while (baseCache.size > BASE_CACHE_MAX) baseCache.delete(baseCache.keys().next().value);
+      this.base = { key, cv };
+    }
+    return this.base.cv;
   }
 
   draw() {
-    if (!this.base) this.renderBase();
+    const base = this.baseLayer();
     const g = this.canvas.getContext('2d');
     const R = this.R, rot = this.headingUp == null ? 0 : -this.headingUp * DEG;
     g.setTransform(1, 0, 0, 1, 0, 0);
@@ -102,7 +167,7 @@ export class Radar {
     g.translate(R, R);
     g.save();
     g.rotate(rot);
-    g.drawImage(this.base, -R, -R);
+    g.drawImage(base, -R, -R);
     this.drawCompass(g);
     // target on the edge, in its true direction
     const ta = this.truth.az * DEG;

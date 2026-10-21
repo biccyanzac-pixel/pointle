@@ -34,6 +34,7 @@ node tools/fetch_wikidata.mjs DIR    # fame (Wikipedia sitelink counts) + landma
 node tools/build_targets.mjs DIR     # site/data/targets.json + towns.json
 node tools/make_schedule.mjs --keep-until <today>   # NEVER regenerate past or current days once live
 node tools/build_land.mjs            # coastlines
+node tools/build_radar_land.mjs      # the reveal radar's pre-simplified coastlines (re-run after build_land)
 ```
 
 ## Deploy
@@ -48,7 +49,7 @@ cd worker && npx wrangler deploy     # redeploy whenever site/data/*.json or sit
 ## Layout
 - `site/`: the static website
   - `js/geo.js` (through-Earth directions, WGS84), `js/wmm.js` (World Magnetic Model declination), `js/orientation.js` (device orientation to pointing direction), `js/sensors.js` (live sensor stream), `js/scoring.js`, `js/daily.js` (dates, seeding), `js/rules.js` (daily target rules, practice exclusions), `js/radar.js`, `js/globe.js`, `js/mapview.js`, `js/compass.js`, `js/ar.js`, `js/app.js` (UI, laid out like ridd-le)
-  - `data/targets.json`, `data/schedule.json` (820 days from 2026-10-09, 3 places + reserve + fixed spot per day), `data/towns.json`, `data/land-*.json`
+  - `data/targets.json`, `data/schedule.json` (820 days from 2026-10-09, 3 places + reserve + fixed spot per day), `data/towns.json`, `data/land-*.json` (globe), `data/radar/land-*.json` (radar: the same coastlines with per-zoom detail levels, from `tools/build_radar_land.mjs`)
   - `sensors.html`: device test page
 - `worker/`: leaderboard API (Cloudflare Worker + D1)
 - `tools/`: data builders, schedule generator, local server
