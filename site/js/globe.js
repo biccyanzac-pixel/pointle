@@ -3,11 +3,27 @@
 import * as THREE from '../vendor/three/three.module.min.js';
 import { DEG, enuToEcef, normalize } from './geo.js';
 
-const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+// Theme colours, read once (not per frame) and re-read when the colour scheme flips.
+const cssCache = new Map();
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => cssCache.clear());
+const css = (name) => {
+  if (!cssCache.has(name)) cssCache.set(name, getComputedStyle(document.documentElement).getPropertyValue(name).trim());
+  return cssCache.get(name);
+};
 
 // Zoom limits, as camera distance from the Earth's centre (radius 1). The default view is the furthest out:
 // you can zoom in towards the surface but never shrink the world below its starting size.
 const FAR = 4.4, NEAR = 1.3;
+
+// The reveal's camera glide: 450 ms on the kit's --jgg-ease-in-out, cubic-bezier(0.77, 0, 0.175, 1).
+const GLIDE_MS = 450;
+function easeInOut(x) {
+  const b = (t, p, q) => 3 * (1 - t) * (1 - t) * t * p + 3 * (1 - t) * t * t * q + t * t * t;
+  let lo = 0, hi = 1, t = x;
+  for (let i = 0; i < 18; i++) { t = (lo + hi) / 2; if (b(t, 0.77, 0.175) < x) lo = t; else hi = t; }
+  return b(t, 0, 1);
+}
+const reducedMotion = () => window.JGG?.motion?.reduced() ?? matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** Unit-sphere position in three.js axes (y up = north pole). */
 export function spherePoint(lat, lon, r = 1) {
@@ -87,7 +103,7 @@ export class Globe {
   }
 
   clearMarks() {
-    for (const c of [...this.marks.children]) { this.marks.remove(c); c.geometry?.dispose(); }
+    for (const c of [...this.marks.children]) { this.marks.remove(c); c.geometry?.dispose(); c.material?.dispose(); }
   }
 
   /** Marker scale for the current zoom, so dots and lines keep about the same size on screen. */
@@ -124,10 +140,12 @@ export class Globe {
    * Draw the scene. origin/target: {lat, lon}. guessEnu: ENU unit vector (or null).
    * opts.stub: draw the guess as a short arrow only (practice before playing: never shows where it exits).
    * opts.hideTarget: don't draw the target or the true line.
+   * opts.glide: turn from facing the guess to the answer framing (the reveal's first show only).
    */
   show(opts) {
-    const { origin, target, guessEnu = null, stub = false, hideTarget = false, face = true, guessColour = '--bad' } = opts;
-    this.lastShow = { ...opts, face: false };
+    const { origin, target, guessEnu = null, stub = false, hideTarget = false, face = true, guessColour = '--bad', glide = false } = opts;
+    this.lastShow = { ...opts, face: false, glide: false };
+    if (face) this.stopGlide();   // a new framing (e.g. the share picture) always lands on its final pose
     this.clearMarks();
     this.origin = origin;
     const p = spherePoint(origin.lat, origin.lon);
@@ -151,8 +169,43 @@ export class Globe {
     }
     if (face) this.setZoom(FAR);
     if (face) this.faceTowards(target && !hideTarget ? [p, spherePoint(target.lat, target.lon)] : [p]);
+    if (face && glide && guessEnu && !reducedMotion()) {
+      const to = this.world.quaternion.clone();
+      this.faceTowards([p, this.guessEnd]);
+      this.glideTo(to);
+    }
     this.render();
   }
+
+  /**
+   * On-demand rAF: slerp the globe to `to`, then stop. It waits until the globe is at least half on screen (it
+   * usually sits below the fold, and a glide nobody sees is just work). A drag or a new framing cancels it.
+   */
+  glideTo(to) {
+    this.stopGlide();
+    if (typeof IntersectionObserver === 'undefined') return this.runGlide(to);
+    this.glideSeen = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.intersectionRatio >= 0.5)) return;
+      this.glideSeen.disconnect(); this.glideSeen = null;
+      this.runGlide(to);
+    }, { threshold: 0.5 });
+    this.glideSeen.observe(this.canvas);
+  }
+
+  runGlide(to) {
+    const from = this.world.quaternion.clone();
+    let t0 = 0;
+    const step = (now) => {
+      t0 ||= now;
+      const k = Math.min(1, (now - t0) / GLIDE_MS);
+      this.world.quaternion.slerpQuaternions(from, to, easeInOut(k));
+      this.render();
+      this.glideRaf = k < 1 ? requestAnimationFrame(step) : 0;
+    };
+    this.glideRaf = requestAnimationFrame(step);
+  }
+
+  stopGlide() { cancelAnimationFrame(this.glideRaf); this.glideRaf = 0; this.glideSeen?.disconnect(); this.glideSeen = null; }
 
   /**
    * Live arrow from the origin along an ENU direction (phone pointing, or the swept direction in map mode).
@@ -160,7 +213,7 @@ export class Globe {
    */
   setLive(enu, colour = '--bad') {
     this.lastLive = [enu, colour];
-    for (const c of [...this.live.children]) { this.live.remove(c); c.geometry?.dispose(); }
+    for (const c of [...this.live.children]) { this.live.remove(c); c.geometry?.dispose(); c.material?.dispose(); }
     if (!enu || !this.origin) { this.render(); return; }
     const p = spherePoint(this.origin.lat, this.origin.lon);
     const d = enuToWorld(enu, this.origin.lat, this.origin.lon);
@@ -243,6 +296,7 @@ export class Globe {
     let pinch = null, press = null;   // press: where a single-pointer press started, until it becomes a drag
     const spread = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
     el.addEventListener('pointerdown', (e) => {
+      this.stopGlide();   // grabbing the globe mid-glide: it stays where it is, under your finger
       el.setPointerCapture(e.pointerId);
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       press = pts.size === 1 ? { x: e.clientX, y: e.clientY } : null;

@@ -90,6 +90,10 @@ const KIND = { city: 'City', landmark: 'Landmark', nature: 'Natural wonder' };
 const fixedOrigin = () => T(S.entry.origin);
 
 // ---------- screens (inside the game card) ----------
+// Shared motion (kit, docs/motion-system.md). The kit loads with defer and may be missing: every call has a
+// plain fallback with the same end state.
+const motion = () => window.JGG?.motion;
+const scrollTo = (node, block = 'start') => (motion() ? motion().scroll(node, { block }) : node.scrollIntoView({ block }));
 let current = 'home';
 const leaveHooks = [];
 function show(id, { scroll = true } = {}) {
@@ -97,7 +101,7 @@ function show(id, { scroll = true } = {}) {
   $$('#game .screen').forEach((s) => { s.hidden = s.id !== id; });
   current = id;
   if (id === 'home') renderHome();
-  if (scroll) $('#game').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (scroll) scrollTo($('#game'));
 }
 document.addEventListener('click', (e) => { if (e.target.closest('[data-home]')) show('home'); });
 function fillPrivacy() {
@@ -181,7 +185,7 @@ function originChosen(origin, label, fixed, town) {
 }
 function locationFailed(message, help) {
   showError($('#loc-msg'), `${message} You can pick your town instead: start typing it below.`, help);
-  $('#loc-msg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  scrollTo($('#loc-msg'), 'center');
   $('#town-q').focus({ preventScroll: true });
 }
 $('#loc-gps').addEventListener('click', async () => {
@@ -524,6 +528,9 @@ async function showReveal(i, guess, truth) {
     fact(fmtKm(f.flightKm), 'flying round the surface'),
     fact(fmtKm(f.deepestKm), `deepest point of the tunnel, in ${layer}`),
   );
+  // the score counts up (any tap skips it) and the result cascades in; #next is usable at once
+  motion()?.settle($('#rev-score'), pts, { duration: 280 }); // 3 times a day: quick (the daily total keeps 700 ms)
+  motion()?.reveal([$('#rev-score'), $('.rev-detail'), ...$$('#facts .fact')]);
   const { Radar, TiltBar } = await import('./radar.js');
   const rings = await land(f.centralAngle > 60 ? '110m' : '50m');
   const radar = new Radar($('#radar'), { origin: S.origin, target: t, targetName: t.n, trueAzEl: tA, rings });
@@ -533,7 +540,7 @@ async function showReveal(i, guess, truth) {
   const { Globe } = await import('./globe.js');
   S.globe ??= new Globe($('#globe'), await land('110m'));
   S.globe.resize();
-  S.globe.show({ origin: S.origin, target: t, guessEnu: guess, guessColour: '--ink' });
+  S.globe.show({ origin: S.origin, target: t, guessEnu: guess, guessColour: '--ink', glide: true });
   S.lastShare = { origin: S.origin, target: t, guess };
   let globeDirty = false, lastLive = null;
   const setLive = (dir) => { lastLive = dir; globeDirty = true; };
@@ -547,10 +554,21 @@ async function showReveal(i, guess, truth) {
     ? 'Sweep your phone around: the map turns with you and the red arrow on the globe follows. Find the green dot and the green line on the bar.'
     : 'Drag around the map to turn, drag the bar to tilt, or click a spot on the globe: the red arrow follows. Line up with the green marks.';
   if (sensor) {
-    let buzzed = false;
+    // Redraw on demand, at most every 33 ms as before, and only when the reading has moved (a phone held
+    // still, or a sensor repeating itself, no longer costs a frame every 33 ms)
+    let buzzed = false, raf = 0, lastDraw = 0, lastKey = '';
+    const loop = (now) => {
+      raf = 0;
+      if (now - lastDraw > 33) { draw(); lastDraw = now; } else raf = requestAnimationFrame(loop);
+    };
+    const kick = () => { raf ||= requestAnimationFrame(loop); };
     const off = S.sensor.onChange(() => {
       const a = S.sensor.azEl(150);
       if (!a) return;
+      const key = `${a.az.toFixed(1)} ${a.el.toFixed(1)}`;
+      if (key === lastKey) return;
+      lastKey = key;
+      kick();
       radar.headingUp = Math.abs(a.el) < 80 ? a.az : radar.headingUp;
       radar.pointer = a; bar.live = a.el;
       setLive(fromAzEl(a.az, a.el));
@@ -558,9 +576,7 @@ async function showReveal(i, guess, truth) {
       if (close && !buzzed && navigator.vibrate) navigator.vibrate([40, 60, 40]);
       buzzed = close;
     });
-    let raf = 0, lastDraw = 0;
-    const loop = (now) => { if (now - lastDraw > 33) { draw(); lastDraw = now; } raf = requestAnimationFrame(loop); };
-    raf = requestAnimationFrame(loop);
+    kick();
     leaveHooks.push(off, () => cancelAnimationFrame(raf));
   } else {
     radar.pointer = { ...gA }; bar.live = gA.el;
@@ -598,17 +614,19 @@ function dragOn(node, fn) {
   node.addEventListener('pointerdown', h.down); node.addEventListener('pointermove', h.move);
   node.addEventListener('pointerup', h.up); node.addEventListener('pointercancel', h.up);
   drags.set(node, h);
+  node.classList.add('drag-on');   // CSS: touch-action none only while it can be dragged
 }
 function dragOff(node) {
   const h = drags.get(node);
   if (!h) return;
   node.removeEventListener('pointerdown', h.down); node.removeEventListener('pointermove', h.move);
   node.removeEventListener('pointerup', h.up); node.removeEventListener('pointercancel', h.up);
+  node.classList.remove('drag-on');
 }
 
 $('#next').addEventListener('click', () => {
   const g = S.game;
-  if (g.idx >= N) { const m = g.mode; S.game = null; showDone(m); } else showTarget();
+  if (g.idx >= N) { const m = g.mode; S.game = null; showDone(m, true); } else showTarget();
 });
 
 // ---------- AR ----------
@@ -634,7 +652,7 @@ $('#ar-close').addEventListener('click', () => {
 function siteUrl() { const u = new URL(location.href); u.search = ''; u.hash = ''; return u.toString(); }
 
 const autoSubmitted = new Set(); // day:slot keys auto-submitted this visit (never retried automatically)
-function showDone(mode) {
+function showDone(mode, fresh = false) {
   const p = playFor(mode);
   show('done');
   const errors = p.results.map((r) => r.error);
@@ -643,8 +661,11 @@ function showDone(mode) {
   $('#done-total').textContent = `${total}`;
   $('#done-total').className = `score ${scoreClass(total, MAX_TOTAL)}`;
   $('#done-list').replaceChildren(...p.results.map((r) => el('li', { class: 'attempt-row' },
-    el('span', {}, `${emojiFor(r.error)} ${placeName(T(r.id))}`),
+    el('span', { class: 'attempt-name' }, `${emojiFor(r.error)} ${placeName(T(r.id))}`),
     el('span', { class: `attempt-score ${scoreClass(scoreFor(r.error), 100)}` }, `${fmtDeg(r.error)} · ${scoreFor(r.error)}`))));
+  // just finished (not a revisit or reload): count the total up and cascade the rows. Never awaited:
+  // share, the picture, the form and the board below show at once.
+  if (fresh) { motion()?.settle($('#done-total'), total); motion()?.reveal($$('#done-list .attempt-row')); }
   const link = `${siteUrl()}?r=${encodeResult({ day: S.day, mode, errors })}`;
   const text = shareText(puzzleNumber(S.day), p.results.map((r) => ({ name: T(r.id).n, error: r.error })), link, MODE_LABEL[mode]);
   $('#share-preview').textContent = text;
@@ -723,7 +744,7 @@ async function submitScore(mode) {
     boardMode = mode;
     boardLate = S.archive && S.day !== S.today;
     await renderBoard();
-    $('#board').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollTo($('#board'));
   } catch (err) {
     showError(msg, err.message);
   } finally {
@@ -737,9 +758,9 @@ function rowNode(r, mode, period) {
   return el('li', { class: `row${r.you ? ' me' : ''}` },
     el('span', { class: 'row-rank' }, String(r.rank)),
     el('span', { class: 'row-main' },
-      el('span', { class: 'row-name' }, `${r.name}${mode.endsWith('map') ? (r.device === 'phone' ? ' 📱' : ' 💻') : ''}`),
+      el('span', { class: 'row-name', dir: 'auto', title: r.name ?? '' }, `${r.name ?? '—'}${mode.endsWith('map') ? (r.device === 'phone' ? ' 📱' : ' 💻') : ''}`),
       r.town || period === 'week' ? el('span', { class: 'row-sub' }, [r.town, period === 'week' ? `${r.days} day${r.days === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')) : ''),
-    el('span', { class: 'row-score' }, String(r.total)));
+    el('span', { class: 'row-score' }, String(r.total ?? '—')));
 }
 async function renderBoard() {
   const past = S.day !== S.today;
@@ -806,8 +827,8 @@ async function renderYesterday() {
   const boards = await Promise.all(MODES.map((m) => api.board({ mode: m, period: 'day', day: y }).catch(() => null)));
   boards.forEach((b, i) => {
     if (!b?.top?.length) return;
-    rows.append(el('li', { class: 'yesterday-row' }, el('span', { class: 'yesterday-score' }, String(b.top[0].total)),
-      el('span', {}, `🏆 ${b.top[0].name}`), el('span', { class: 'yesterday-mode' }, `${MODE_LABEL[MODES[i]]} · ${b.players} played`)));
+    rows.append(el('li', { class: 'yesterday-row' }, el('span', { class: 'yesterday-score' }, String(b.top[0].total ?? '—')),
+      el('span', { class: 'yesterday-name', dir: 'auto', title: b.top[0].name ?? '' }, `🏆 ${b.top[0].name ?? '—'}`), el('span', { class: 'yesterday-mode' }, `${MODE_LABEL[MODES[i]]} · ${b.players} played`)));
   });
   if (!rows.childElementCount) rows.append(el('li', { class: 'yesterday-row' }, el('span', {}, 'Nobody played yesterday.')));
 }
@@ -828,8 +849,9 @@ function renderArchiveList() {
 }
 $('#archive-browse').addEventListener('click', () => {
   const list = $('#archive-list');
-  list.hidden = !list.hidden;
-  if (!list.hidden) renderArchiveList();
+  if (!list.hidden) { list.hidden = true; return; }
+  renderArchiveList();
+  motion() ? motion().enter(list) : (list.hidden = false);
 });
 function openArchiveDay(d) {
   S.archive = true; S.day = d; S.entry = entryForDay(d); S.game = null;
@@ -937,7 +959,7 @@ $('#prac-check').addEventListener('click', () => {
   const c = compareDirections(d, trueDirection(S.origin, prac.target));
   prac.checked = true;
   drawPractice(false);
-  $('#prac-globe').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  scrollTo($('#prac-globe'), 'center');
   $('#prac-result').hidden = false;
   $('#prac-result').textContent = `${fmtDeg(c.error)} off (${scoreFor(c.error)}/100): ${describeMiss(c.horizontal, c.vertical)}. Press "New place" for another.`;
 });
